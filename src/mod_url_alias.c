@@ -37,6 +37,11 @@ typedef struct {
     int engine_status; /* URLAliasEngine */
 } urlalias_server_config;
 
+/*
+ * Structure : global data structure declaration
+ */
+module AP_MODULE_DECLARE_DATA urlalias_module;
+
 /* The sample content handler */
 static int url_alias_handler(request_rec *r)
 {
@@ -56,7 +61,7 @@ static void url_alias_register_hooks(apr_pool_t *p)
 }
 
 /* Dispatch list for API hooks */
-module AP_MODULE_DECLARE_DATA url_alias_module = {
+module AP_MODULE_DECLARE_DATA urlalias_module = {
     STANDARD20_MODULE_STUFF, 
     NULL,                  /* create per-dir    config structures */
     NULL,                  /* merge  per-dir    config structures */
