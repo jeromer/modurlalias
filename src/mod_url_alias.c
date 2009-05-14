@@ -63,6 +63,34 @@ static int url_alias_handler(request_rec *r)
 }
 
 /*
+ * Conf : create and initialize per <VirtualHost> configuration structure
+ */
+static void *config_server_create(apr_pool_t *p, server_rec *s)
+{
+    urlalias_server_config *server_config;
+
+    server_config = (urlalias_server_config *) apr_pcalloc(p, sizeof(urlalias_server_config));
+
+    server_config->engine_status = ENGINE_DISABLED;
+    
+    return (void *)server_config;
+}
+
+/*
+ * Conf : create and initialize per <Directory> configuration structure
+ */
+static void *config_perdir_create(apr_pool_t *p, char *path)
+{
+    urlalias_perdir_config *directory_config;
+
+    directory_config = (urlalias_perdir_config *) apr_pcalloc(p, sizeof(urlalias_perdir_config));
+
+    directory_config->engine_status = ENGINE_DISABLED;
+
+    return (void *) directory_config;
+}
+
+/*
  * Conf : engine state, On or Off
  */
 static const char *cmd_urlaliasengine(cmd_parms *cmd, void *in_directory_config, int flag)
@@ -111,9 +139,9 @@ static const command_rec command_table[] = {
  */
 module AP_MODULE_DECLARE_DATA urlalias_module = {
     STANDARD20_MODULE_STUFF, 
-    NULL,                     /* create per-dir    config structures */
+    config_perdir_create,     /* create per-dir    config structures */
     NULL,                     /* merge  per-dir    config structures */
-    NULL,                     /* create per-server config structures */
+    config_server_create,     /* create per-server config structures */
     NULL,                     /* merge  per-server config structures */
     command_table,            /* table of config file commands       */
     url_alias_register_hooks  /* register hooks                      */
