@@ -23,6 +23,9 @@
 #include "http_protocol.h"
 #include "ap_config.h"
 
+#define ENGINE_DISABLED 0
+#define ENGINE_ENABLED  1
+
 /*
  * Structure : per <Directory> configuration
  */
@@ -55,18 +58,53 @@ static int url_alias_handler(request_rec *r)
     return OK;
 }
 
+/*
+ * Conf : engine state, On or Off
+ */
+static const char *cmd_urlaliasengine(cmd_parms *cmd, void *in_directory_config, int flag)
+{
+    urlalias_perdir_config *directory_config;
+    urlalias_server_config *server_config;
+
+    directory_config = in_directory_config;
+    server_config    = ap_get_module_config(cmd->server->module_config, &urlalias_module);
+
+    if (cmd->path == NULL) { 
+        /* <VirtualHost> configuration */
+        server_config->engine_status = (flag ? ENGINE_ENABLED : ENGINE_DISABLED);
+    }
+    else {
+        /* <Directory> configuration */
+        directory_config->engine_status = (flag ? ENGINE_ENABLED : ENGINE_DISABLED);
+    }
+
+    return NULL;
+}
 static void url_alias_register_hooks(apr_pool_t *p)
 {
     ap_hook_handler(url_alias_handler, NULL, NULL, APR_HOOK_MIDDLE);
 }
 
+/*
+ * Conf : configuration directives declaration
+ */
+static const command_rec command_table[] = {
+    AP_INIT_FLAG( "URLAliasEngine",
+                  cmd_urlaliasengine, 
+                  NULL,
+                  OR_FILEINFO,
+                  "On or Off : enable or disable (default) the URL alias engine"),
+
+    { NULL }
+};
+
 /* Dispatch list for API hooks */
 module AP_MODULE_DECLARE_DATA urlalias_module = {
     STANDARD20_MODULE_STUFF, 
-    NULL,                  /* create per-dir    config structures */
-    NULL,                  /* merge  per-dir    config structures */
-    NULL,                  /* create per-server config structures */
-    NULL,                  /* merge  per-server config structures */
-    NULL,                  /* table of config file commands       */
+    NULL,                     /* create per-dir    config structures */
+    NULL,                     /* merge  per-dir    config structures */
+    NULL,                     /* create per-server config structures */
+    NULL,                     /* merge  per-server config structures */
+    command_table,            /* table of config file commands       */
     url_alias_register_hooks  /* register hooks                      */
 };
