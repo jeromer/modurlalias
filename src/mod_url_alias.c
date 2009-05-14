@@ -45,16 +45,20 @@ typedef struct {
  */
 module AP_MODULE_DECLARE_DATA urlalias_module;
 
-/* The sample content handler */
+/*
+ * Handler : default request handler
+ */
 static int url_alias_handler(request_rec *r)
 {
     if (strcmp(r->handler, "url_alias")) {
         return DECLINED;
     }
+
     r->content_type = "text/html";      
 
     if (!r->header_only)
         ap_rputs("The sample page from mod_url_alias.c\n", r);
+
     return OK;
 }
 
@@ -80,6 +84,10 @@ static const char *cmd_urlaliasengine(cmd_parms *cmd, void *in_directory_config,
 
     return NULL;
 }
+
+/*
+ * Hook : global hook table
+ */
 static void url_alias_register_hooks(apr_pool_t *p)
 {
     ap_hook_handler(url_alias_handler, NULL, NULL, APR_HOOK_MIDDLE);
@@ -98,7 +106,9 @@ static const command_rec command_table[] = {
     { NULL }
 };
 
-/* Dispatch list for API hooks */
+/* 
+ * Structure : module config global structure
+ */
 module AP_MODULE_DECLARE_DATA urlalias_module = {
     STANDARD20_MODULE_STUFF, 
     NULL,                     /* create per-dir    config structures */
