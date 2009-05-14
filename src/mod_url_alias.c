@@ -23,6 +23,20 @@
 #include "http_protocol.h"
 #include "ap_config.h"
 
+/*
+ * Structure : per <Directory> configuration
+ */
+typedef struct {
+    int engine_status; /* URLAliasEngine */
+} urlalias_perdir_config;
+
+/*
+ * Structure : per <VirtualHost> configuration
+ */
+typedef struct {
+    int engine_status; /* URLAliasEngine */
+} urlalias_server_config;
+
 /* The sample content handler */
 static int url_alias_handler(request_rec *r)
 {
