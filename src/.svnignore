@@ -1,0 +1,8 @@
+Makefile
+Makefile.in
+mod_url_alias_la-mod_url_alias.o
+config.h
+mod_url_alias.la
+mod_url_alias_la-mod_url_alias.lo
+stamp-h1
+.deps
