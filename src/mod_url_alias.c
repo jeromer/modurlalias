@@ -46,23 +46,6 @@ typedef struct {
 module AP_MODULE_DECLARE_DATA urlalias_module;
 
 /*
- * Handler : default request handler
- */
-static int url_alias_handler(request_rec *r)
-{
-    if (strcmp(r->handler, "url_alias")) {
-        return DECLINED;
-    }
-
-    r->content_type = "text/html";      
-
-    if (!r->header_only)
-        ap_rputs("The sample page from mod_url_alias.c\n", r);
-
-    return OK;
-}
-
-/*
  * Conf : create and initialize per <VirtualHost> configuration structure
  */
 static void *config_server_create(apr_pool_t *p, server_rec *s)
@@ -118,7 +101,6 @@ static const char *cmd_urlaliasengine(cmd_parms *cmd, void *in_directory_config,
  */
 static void url_alias_register_hooks(apr_pool_t *p)
 {
-    ap_hook_handler(url_alias_handler, NULL, NULL, APR_HOOK_MIDDLE);
 }
 
 /*
