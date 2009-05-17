@@ -15,10 +15,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
+ *
+ * The actual table used
+ * +------------+--------------+------+-----+---------+-------+
+ * | Field      | Type         | Null | Key | Default | Extra |
+ * +------------+--------------+------+-----+---------+-------+
+ * | source     | varchar(200) | NO   | PRI |         |       | 
+ * | module     | varchar(30)  | NO   |     |         |       | 
+ * | view       | varchar(30)  | NO   |     |         |       | 
+ * | parameters | varchar(200) | NO   |     |         |       | 
+ * +------------+--------------+------+-----+---------+-------+
  **/
 
 #include "httpd.h"
 #include "http_config.h"
+#include "http_log.h"
 #include "http_protocol.h"
 #include "ap_config.h"
 #include "http_request.h"
@@ -56,6 +67,72 @@ module AP_MODULE_DECLARE_DATA urlalias_module;
  */
 static int hook_fixup(request_rec *r)
 {
+    ap_dbd_t           *dbd              = urlalias_dbd_acquire_fn(r);
+    apr_dbd_prepared_t *prepared_stmt    = NULL;
+    apr_int16_t        select_error_code = -1;
+    apr_dbd_results_t  *res              = NULL;
+    apr_dbd_row_t      *row              = NULL;
+
+    /* Table's fields */
+    const char *source     = NULL;
+    const char *module     = NULL;
+    const char *view       = NULL;
+    const char *parameters = NULL;
+
+    /* Extra database connection check */
+    if(dbd == NULL) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Unable to acquire a database connection ");
+        return DECLINED;
+    }
+
+    /* This is not for us */
+    if( !r->uri || strlen(r->uri) == 0) {
+        return DECLINED;
+    }
+
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->uri : %s", r->uri);
+
+    prepared_stmt = apr_hash_get(dbd->prepared, QUERY_LABEL, APR_HASH_KEY_STRING);
+
+    /* the prepared statement disapearred */
+    if (prepared_stmt == NULL) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "A prepared statement could not be found");
+        return DECLINED;
+    }
+
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "prepared statement found");
+
+    select_error_code = apr_dbd_pvselect(dbd->driver,
+                                         r->pool,
+                                         dbd->handle,
+                                         &res,
+                                         prepared_stmt,
+                                         0,
+                                         r->uri,
+                                         NULL);
+
+    if (select_error_code != 0) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+                      "Query execution error looking up '%s' "
+                      "in database", r->uri);
+        return DECLINED;
+    }
+
+    if(apr_dbd_get_row(dbd->driver, r->pool, res, &row, 1) == -1) {
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "no results found");
+        return DECLINED;
+    }
+
+    source     = apr_dbd_get_entry(dbd->driver, row, 0);
+    module     = apr_dbd_get_entry(dbd->driver, row, 1);
+    view       = apr_dbd_get_entry(dbd->driver, row, 2);
+    parameters = apr_dbd_get_entry(dbd->driver, row, 3);
+
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "source     : %s", source);
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "module     : %s", module);
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "view       : %s", view);
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "parameters : %s", parameters);
+
     return DECLINED;
 }
 
