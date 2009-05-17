@@ -133,7 +133,7 @@ static int hook_fixup(request_rec *r)
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "view       : %s", view);
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "parameters : %s", parameters);
 
-    return DECLINED;
+    return OK;
 }
 
 /*
