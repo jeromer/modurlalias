@@ -40,13 +40,6 @@ static ap_dbd_t *(*urlalias_dbd_acquire_fn)(request_rec*)                       
 static void      (*urlalias_dbd_prepare_fn)(server_rec*, const char*, const char*) = NULL;
 
 /*
- * Structure : per <Directory> configuration
- */
-typedef struct {
-    int engine_status; /* URLAliasEngine */
-} urlalias_perdir_config;
-
-/*
  * Structure : per <VirtualHost> configuration
  */
 typedef struct {
@@ -105,37 +98,17 @@ static void *config_server_create(apr_pool_t *p, server_rec *s)
 }
 
 /*
- * Conf : creates and initializes per <Directory> configuration structure
- */
-static void *config_perdir_create(apr_pool_t *p, char *path)
-{
-    urlalias_perdir_config *directory_config;
-
-    directory_config = (urlalias_perdir_config *) apr_pcalloc(p, sizeof(urlalias_perdir_config));
-
-    directory_config->engine_status = ENGINE_DISABLED;
-
-    return (void *) directory_config;
-}
-
-/*
  * Conf : engine state, On or Off
  */
 static const char *cmd_urlaliasengine(cmd_parms *cmd, void *in_directory_config, int flag)
 {
-    urlalias_perdir_config *directory_config;
     urlalias_server_config *server_config;
 
-    directory_config = in_directory_config;
     server_config    = ap_get_module_config(cmd->server->module_config, &urlalias_module);
 
-    if (cmd->path == NULL) { 
+    if (cmd->path == NULL) {
         /* <VirtualHost> configuration */
         server_config->engine_status = (flag ? ENGINE_ENABLED : ENGINE_DISABLED);
-    }
-    else {
-        /* <Directory> configuration */
-        directory_config->engine_status = (flag ? ENGINE_ENABLED : ENGINE_DISABLED);
     }
 
     return NULL;
@@ -168,7 +141,7 @@ static const command_rec command_table[] = {
  */
 module AP_MODULE_DECLARE_DATA urlalias_module = {
     STANDARD20_MODULE_STUFF, 
-    config_perdir_create,     /* create per-dir    config structures */
+    NULL,                     /* create per-dir    config structures */
     NULL,                     /* merge  per-dir    config structures */
     config_server_create,     /* create per-server config structures */
     NULL,                     /* merge  per-server config structures */
