@@ -35,12 +35,15 @@
 #include "http_request.h"
 #include "apr_dbd.h"
 #include "mod_dbd.h"
+#include "apr_strings.h"
 
 #define ENGINE_DISABLED 0
 #define ENGINE_ENABLED  1
 
 #define QUERY_SQL   "SELECT * FROM urlalias WHERE source = %s"
 #define QUERY_LABEL "urlalias_stmt"
+
+#define DIRECTORY_SEPARATOR "/"
 
 /*
  * Optional function pointers : needed in post_config
@@ -78,6 +81,9 @@ static int hook_fixup(request_rec *r)
     const char *module     = NULL;
     const char *view       = NULL;
     const char *parameters = NULL;
+
+    /* the system URL to redirect to */
+    char *target = NULL;
 
     /* Extra database connection check */
     if(dbd == NULL) {
@@ -123,6 +129,8 @@ static int hook_fixup(request_rec *r)
         return DECLINED;
     }
 
+    /* since the source field is unique there is only one result */
+    /* no need for a loop here                                   */
     source     = apr_dbd_get_entry(dbd->driver, row, 0);
     module     = apr_dbd_get_entry(dbd->driver, row, 1);
     view       = apr_dbd_get_entry(dbd->driver, row, 2);
@@ -133,6 +141,20 @@ static int hook_fixup(request_rec *r)
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "view       : %s", view);
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "parameters : %s", parameters);
 
+    /* assembling the module/view URL */
+    target = apr_pstrcat(r->pool,
+                         DIRECTORY_SEPARATOR, module,
+                         DIRECTORY_SEPARATOR, view,
+                         NULL);
+
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "intermediate target : %s", target);
+
+
+    /* appending parameters to the target */
+    target = apr_pstrcat(r->pool, target, "?", parameters, NULL);
+
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "final target : %s", target);
+    
     return OK;
 }
 
