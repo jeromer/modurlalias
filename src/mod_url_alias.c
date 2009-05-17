@@ -66,7 +66,39 @@ typedef struct {
 module AP_MODULE_DECLARE_DATA urlalias_module;
 
 /*
+ * Hook : content handler for internal redirections
+ *
+ * This function is called after hook_fixup.
+ */
+static int hook_handler(request_rec *r)
+{
+    /* using the handler name is not enough to do the job */
+    if (strcmp(r->handler, "urlalias-internal-redirect-handler")) {
+        return DECLINED;
+    }
+
+    /* this comes from hook_fixup and is safer*/
+    if (strncmp(r->filename, "urlalias-redirect:", 18) != 0) {
+        return DECLINED;
+    }
+
+    /* now the internal redirect */
+    ap_internal_redirect(apr_pstrcat(r->pool,
+                                     r->filename+18,
+                                     /* shall we append arguments ? */
+                                     r->args ? "?" : NULL, r->args, NULL),
+                         r);
+
+    return OK;
+}
+
+/*
  * Hook : maps the nice URL to the system one
+ *
+ * This function does all the source to target mapping stuff
+ * and then it modifies the current requests on the fly so it
+ * is handled by hook_handler for the redirection on the
+ * real file.
  */
 static int hook_fixup(request_rec *r)
 {
@@ -147,14 +179,36 @@ static int hook_fixup(request_rec *r)
                          DIRECTORY_SEPARATOR, view,
                          NULL);
 
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "intermediate target : %s", target);
+    r->filename = apr_pstrdup(r->pool, target);
+
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "target : %s", target);
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->filename : %s", r->filename);
+
+    /* adding parameters to our request */
+    r->args = apr_pstrdup(r->pool, parameters);
+
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->args : %s", r->args);
+
+    /* avoid deadlooping */
+    if (strcmp(r->uri, target) == 0) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "deadlooping URI : %s on target : %s ", r->uri, target);
+        return HTTP_BAD_REQUEST;
+    }
+
+    /* the filename must be either an absolute local path or an
+    * absolute local URL.
+    */
+    if (*r->filename != '/' && !ap_os_is_path_absolute(r->pool, r->filename)) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "non absolute path : %s", r->filename);
+        return HTTP_BAD_REQUEST;
+    }
 
 
-    /* appending parameters to the target */
-    target = apr_pstrcat(r->pool, target, "?", parameters, NULL);
+    /* now we redirect internally to the real filename */
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "internal redirect from %s to %s ", r->uri, r->filename);
+    r->filename = apr_pstrcat(r->pool, "urlalias-redirect:", r->filename, NULL);
+    r->handler = "urlalias-internal-redirect-handler";
 
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "final target : %s", target);
-    
     return OK;
 }
 
@@ -210,7 +264,8 @@ static const char *cmd_urlaliasengine(cmd_parms *cmd, void *in_directory_config,
  */
 static void url_alias_register_hooks(apr_pool_t *p)
 {
-    ap_hook_fixups(hook_fixup, NULL, NULL, APR_HOOK_FIRST);
+    ap_hook_fixups (hook_fixup  , NULL, NULL, APR_HOOK_FIRST);
+    ap_hook_handler(hook_handler, NULL, NULL, APR_HOOK_MIDDLE);
 }
 
 /*
