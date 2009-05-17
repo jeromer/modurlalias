@@ -1,5 +1,5 @@
-"Info/Actualite-France/Economie/L-inflation-au-plus-bas-en-France-depuis-50-ans","content","view.php","full/222/753/(gid)/222753",0
-"Nachrichten/Feuilleton/Kino/Uebersicht/Robert-Pattinson-spielt-Sohn-von-Rachel-Weisz","content","view.php","full/222754",0
-"books/2009/05/13/a-homemade-life","mymodule","read.py","date=2009-05-13&id=12345",0
-"arts/(*)","artmodule","content.rb","$1",1
-"gardening/2009/05/12/how-to-have-a-star-trek-garden","gardening","fetch.php",,0
+"/Info/Actualite-France/Economie/L-inflation-au-plus-bas-en-France-depuis-50-ans","content","view","vm=full&coid=222&v=753&gid=222753",0
+"Nachrichten/Feuilleton/Kino/Uebersicht/Robert-Pattinson-spielt-Sohn-von-Rachel-Weisz","content","view","vm=full&coid=222754",0
+"books/2009/05/13/a-homemade-life","mymodule","read","date=2009-05-13&id=12345",0
+"arts/(*)","artmodule","content","$1",1
+"gardening/2009/05/12/how-to-have-a-star-trek-garden","gardening","fetch",,0
