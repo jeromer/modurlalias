@@ -15,16 +15,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Please read INSTALL to learn how to install this module
  **/
 
 #include "httpd.h"
 #include "http_config.h"
 #include "http_protocol.h"
 #include "ap_config.h"
+#include "http_request.h"
+#include "apr_dbd.h"
+#include "mod_dbd.h"
 
 #define ENGINE_DISABLED 0
 #define ENGINE_ENABLED  1
+
+#define QUERY_SQL   "SELECT * FROM urlalias WHERE source = %s"
+#define QUERY_LABEL "urlalias_stmt"
+
+/*
+ * Optional function pointers : needed in post_config
+ * - ap_dbdd_prepare
+ * - ap_dbd_acquire
+ */
+static ap_dbd_t *(*urlalias_dbd_acquire_fn)(request_rec*)                          = NULL;
+static void      (*urlalias_dbd_prepare_fn)(server_rec*, const char*, const char*) = NULL;
 
 /*
  * Structure : per <Directory> configuration
@@ -44,6 +57,30 @@ typedef struct {
  * Structure : global data structure declaration
  */
 module AP_MODULE_DECLARE_DATA urlalias_module;
+
+/*
+ * Hook : post config, create the SQL prepared statement for
+ *        the SQL query.
+ */
+static int post_config(apr_pool_t *pconf, 
+                       apr_pool_t *plog,
+                       apr_pool_t *ptemp,
+                       server_rec *s)
+{
+    /* Fetching needed function pointers */
+    if (urlalias_dbd_prepare_fn == NULL) {
+        urlalias_dbd_prepare_fn = APR_RETRIEVE_OPTIONAL_FN(ap_dbd_prepare);
+        if (urlalias_dbd_prepare_fn == NULL) {
+            /* mod DBD is not loaded */
+            return DECLINED;
+        }
+        urlalias_dbd_acquire_fn = APR_RETRIEVE_OPTIONAL_FN(ap_dbd_acquire);
+    }
+
+    urlalias_dbd_prepare_fn(s, QUERY_SQL, QUERY_LABEL);
+
+    return OK;
+}
 
 /*
  * Conf : create and initialize per <VirtualHost> configuration structure
@@ -101,6 +138,7 @@ static const char *cmd_urlaliasengine(cmd_parms *cmd, void *in_directory_config,
  */
 static void url_alias_register_hooks(apr_pool_t *p)
 {
+    ap_hook_post_config(post_config, NULL, NULL, APR_HOOK_FIRST);
 }
 
 /*
