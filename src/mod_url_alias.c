@@ -60,30 +60,6 @@ static int hook_fixup(request_rec *r)
 }
 
 /*
- * Hook : post config, creates the SQL prepared statement for
- *        the SQL query.
- */
-static int post_config(apr_pool_t *pconf, 
-                       apr_pool_t *plog,
-                       apr_pool_t *ptemp,
-                       server_rec *s)
-{
-    /* Fetching needed function pointers */
-    if (urlalias_dbd_prepare_fn == NULL) {
-        urlalias_dbd_prepare_fn = APR_RETRIEVE_OPTIONAL_FN(ap_dbd_prepare);
-        if (urlalias_dbd_prepare_fn == NULL) {
-            /* mod DBD is not loaded */
-            return DECLINED;
-        }
-        urlalias_dbd_acquire_fn = APR_RETRIEVE_OPTIONAL_FN(ap_dbd_acquire);
-    }
-
-    urlalias_dbd_prepare_fn(s, QUERY_SQL, QUERY_LABEL);
-
-    return OK;
-}
-
-/*
  * Conf : creates and initializes per <VirtualHost> configuration structure
  */
 static void *config_server_create(apr_pool_t *p, server_rec *s)
@@ -111,6 +87,22 @@ static const char *cmd_urlaliasengine(cmd_parms *cmd, void *in_directory_config,
         server_config->engine_status = (flag ? ENGINE_ENABLED : ENGINE_DISABLED);
     }
 
+    /* Only use the connection if the URLAlias engine is enabled */
+    if (server_config->engine_status == ENGINE_DISABLED) {
+        return NULL;
+    }
+
+    /* Fetching needed function pointers */
+    if (urlalias_dbd_prepare_fn == NULL) {
+        urlalias_dbd_prepare_fn = APR_RETRIEVE_OPTIONAL_FN(ap_dbd_prepare);
+        if (urlalias_dbd_prepare_fn == NULL) {
+            return "mod_dbd must be enabled in order to get mod_url_alias working";
+        }
+        urlalias_dbd_acquire_fn = APR_RETRIEVE_OPTIONAL_FN(ap_dbd_acquire);
+    }
+
+    urlalias_dbd_prepare_fn(cmd->server, QUERY_SQL, QUERY_LABEL);
+
     return NULL;
 }
 
@@ -119,7 +111,6 @@ static const char *cmd_urlaliasengine(cmd_parms *cmd, void *in_directory_config,
  */
 static void url_alias_register_hooks(apr_pool_t *p)
 {
-    ap_hook_post_config(post_config, NULL, NULL, APR_HOOK_FIRST);
     ap_hook_fixups(hook_fixup, NULL, NULL, APR_HOOK_FIRST);
 }
 
