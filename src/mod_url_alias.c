@@ -59,7 +59,15 @@ typedef struct {
 module AP_MODULE_DECLARE_DATA urlalias_module;
 
 /*
- * Hook : post config, create the SQL prepared statement for
+ * Hook : maps the nice URL to the system one
+ */
+static int hook_fixup(request_rec *r)
+{
+    return DECLINED;
+}
+
+/*
+ * Hook : post config, creates the SQL prepared statement for
  *        the SQL query.
  */
 static int post_config(apr_pool_t *pconf, 
@@ -83,7 +91,7 @@ static int post_config(apr_pool_t *pconf,
 }
 
 /*
- * Conf : create and initialize per <VirtualHost> configuration structure
+ * Conf : creates and initializes per <VirtualHost> configuration structure
  */
 static void *config_server_create(apr_pool_t *p, server_rec *s)
 {
@@ -97,7 +105,7 @@ static void *config_server_create(apr_pool_t *p, server_rec *s)
 }
 
 /*
- * Conf : create and initialize per <Directory> configuration structure
+ * Conf : creates and initializes per <Directory> configuration structure
  */
 static void *config_perdir_create(apr_pool_t *p, char *path)
 {
@@ -139,6 +147,7 @@ static const char *cmd_urlaliasengine(cmd_parms *cmd, void *in_directory_config,
 static void url_alias_register_hooks(apr_pool_t *p)
 {
     ap_hook_post_config(post_config, NULL, NULL, APR_HOOK_FIRST);
+    ap_hook_fixups(hook_fixup, NULL, NULL, APR_HOOK_FIRST);
 }
 
 /*
