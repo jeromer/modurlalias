@@ -103,15 +103,20 @@ static int hook_handler(request_rec *r)
 static int hook_fixup(request_rec *r)
 {
     /* The actual database connection */
-    ap_dbd_t           *dbd              = urlalias_dbd_acquire_fn(r);
+    ap_dbd_t *dbd = urlalias_dbd_acquire_fn(r);
+
     /* The prepared statement for our SQL query */
-    apr_dbd_prepared_t *prepared_stmt    = NULL;
+    apr_dbd_prepared_t *prepared_stmt = NULL;
+
     /* The error code of execution of our SQL query */
-    apr_int16_t        select_error_code = -1;
+    apr_int16_t select_error_code = -1;
+
     /* The result set */
-    apr_dbd_results_t  *res              = NULL;
+    apr_dbd_results_t *res = NULL;
+
     /* The result row */
-    apr_dbd_row_t      *row              = NULL;
+    apr_dbd_row_t *row = NULL;
+
 
     /* Table's fields */
     const char *source     = NULL;
