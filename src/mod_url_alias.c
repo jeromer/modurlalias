@@ -45,6 +45,8 @@
 
 #define DIRECTORY_SEPARATOR "/"
 
+#define REGEX_FILE_EXT_EXCLUSION "\\.(?:gif|jp[e]?g|png|ico|css|js|mp3|flv)$"
+
 /*
  * Optional function pointers : needed in post_config
  * - ap_dbdd_prepare
@@ -117,6 +119,14 @@ static int hook_fixup(request_rec *r)
     /* The result row */
     apr_dbd_row_t *row = NULL;
 
+    /* The compiled regex we want to apply on each requested URI */
+    ap_regex_t *regex = NULL;
+
+    /* The regex execution result */
+    int regexec_result = AP_REG_NOMATCH;
+
+    /* The list of regex captures */
+    ap_regmatch_t regmatch[AP_MAX_REG_MATCH];
 
     /* Table's fields */
     const char *source     = NULL;
@@ -126,6 +136,23 @@ static int hook_fixup(request_rec *r)
 
     /* the system URL to redirect to */
     char *target = NULL;
+
+    /* We ignore the most common binary files */
+    regex = ap_pregcomp(r->pool, REGEX_FILE_EXT_EXCLUSION, AP_REG_EXTENDED | AP_REG_ICASE | AP_REG_NOSUB);
+
+    if( !regex ) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Unable to compile regex : %s", REGEX_FILE_EXT_EXCLUSION);
+        return DECLINED;
+    }
+
+    regexec_result = ap_regexec(regex, r->uri, AP_MAX_REG_MATCH, regmatch, AP_REG_EXTENDED | AP_REG_ICASE | AP_REG_NOSUB);
+
+    /* regex successfully applied */
+    if( regexec_result == 0 ) {
+        /* then this request is a binary file which is not relevant for us */
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "%s is a binary file, skipping", r->uri);
+        return DECLINED;
+    }
 
     /* Extra database connection check */
     if(dbd == NULL) {
