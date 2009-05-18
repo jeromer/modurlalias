@@ -129,7 +129,6 @@ static int hook_fixup(request_rec *r)
     ap_regmatch_t regmatch[AP_MAX_REG_MATCH];
 
     /* Table's fields */
-    const char *source     = NULL;
     const char *module     = NULL;
     const char *view       = NULL;
     const char *parameters = NULL;
@@ -200,12 +199,10 @@ static int hook_fixup(request_rec *r)
 
     /* since the source field is unique there is only one result */
     /* no need for a loop here                                   */
-    source     = apr_dbd_get_entry(dbd->driver, row, 0);
     module     = apr_dbd_get_entry(dbd->driver, row, 1);
     view       = apr_dbd_get_entry(dbd->driver, row, 2);
     parameters = apr_dbd_get_entry(dbd->driver, row, 3);
 
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "source     : %s", source);
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "module     : %s", module);
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "view       : %s", view);
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "parameters : %s", parameters);
