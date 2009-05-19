@@ -136,6 +136,13 @@ static int hook_fixup(request_rec *r)
     /* the system URL to redirect to */
     char *target = NULL;
 
+    /* The URL alias has already been rewritten to the system file, skipping */
+    /* Avoids extra an useless table lookups */
+    if( ap_is_initial_req(r) == 0) {
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "skpping %s, URI already rewritten", r->uri);
+        return DECLINED;
+    }
+
     /* We ignore the most common binary files */
     regex = ap_pregcomp(r->pool, REGEX_FILE_EXT_EXCLUSION, AP_REG_EXTENDED | AP_REG_ICASE | AP_REG_NOSUB);
 
