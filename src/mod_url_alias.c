@@ -281,11 +281,6 @@ static const char *cmd_urlaliasengine(cmd_parms *cmd, void *in_directory_config,
         server_config->engine_status = (flag ? ENGINE_ENABLED : ENGINE_DISABLED);
     }
 
-    /* Only use the connection if the URLAlias engine is enabled */
-    if (server_config->engine_status == ENGINE_DISABLED) {
-        return NULL;
-    }
-
     /* Fetching needed function pointers */
     if (urlalias_dbd_prepare_fn == NULL) {
         urlalias_dbd_prepare_fn = APR_RETRIEVE_OPTIONAL_FN(ap_dbd_prepare);
