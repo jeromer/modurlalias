@@ -42,12 +42,14 @@
 #define ENGINE_DISABLED 0
 #define ENGINE_ENABLED  1
 
-#define QUERY_SQL   "SELECT * FROM urlalias WHERE source = %s"
+#define SQL_QUERY_PART_1 "SELECT * FROM "
+#define SQL_QUERY_PART_2 " WHERE source = %s"
 #define QUERY_LABEL "urlalias_stmt"
 
 #define DIRECTORY_SEPARATOR "/"
 
 #define REGEX_FILE_EXT_EXCLUSION "\\.(?:gif|jp[e]?g|png|ico|css|js|mp3|flv)$"
+#define TABLE_NAME "urlalias"
 
 /*
  * Optional function pointers : needed in post_config
@@ -61,7 +63,8 @@ static void      (*urlalias_dbd_prepare_fn)(server_rec*, const char*, const char
  * Structure : per <VirtualHost> configuration
  */
 typedef struct {
-    int engine_status; /* URLAliasEngine */
+    int engine_status;        /* URLAliasEngine */
+    const char *table_name    /* URLAliasTableName*/
 } urlalias_server_config;
 
 /*
@@ -244,6 +247,7 @@ static void *config_server_create(apr_pool_t *p, server_rec *s)
     server_config = (urlalias_server_config *) apr_pcalloc(p, sizeof(urlalias_server_config));
 
     server_config->engine_status = ENGINE_DISABLED;
+    server_config->table_name    = TABLE_NAME;
     
     return (void *)server_config;
 }
@@ -253,6 +257,7 @@ static void *config_server_create(apr_pool_t *p, server_rec *s)
  */
 static const char *cmd_urlaliasengine(cmd_parms *cmd, void *in_directory_config, int flag)
 {
+    const char *sql_query = NULL;
     urlalias_server_config *server_config;
 
     server_config    = ap_get_module_config(cmd->server->module_config, &urlalias_module);
@@ -271,8 +276,25 @@ static const char *cmd_urlaliasengine(cmd_parms *cmd, void *in_directory_config,
         urlalias_dbd_acquire_fn = APR_RETRIEVE_OPTIONAL_FN(ap_dbd_acquire);
     }
 
-    urlalias_dbd_prepare_fn(cmd->server, QUERY_SQL, QUERY_LABEL);
+    sql_query = apr_pstrcat(cmd->pool, SQL_QUERY_PART_1, server_config->table_name, SQL_QUERY_PART_2, NULL);
+    urlalias_dbd_prepare_fn(cmd->server, sql_query, QUERY_LABEL);
 
+    return NULL;
+}
+
+/*
+ * Conf : table name
+ */
+static const char *cmd_urlaliastablename(cmd_parms *cmd, void *in_directory_config, const char *table_name)
+{
+    urlalias_server_config *server_config;
+
+    server_config = ap_get_module_config(cmd->server->module_config, &urlalias_module);
+
+    if (cmd->path == NULL && strlen(table_name) > 0) {
+        server_config->table_name = table_name;
+    }
+    
     return NULL;
 }
 
@@ -288,12 +310,20 @@ static void url_alias_register_hooks(apr_pool_t *p)
  * Conf : configuration directives declaration
  */
 static const command_rec command_table[] = {
+
+    AP_INIT_TAKE1( "URLAliasTableName",
+                   cmd_urlaliastablename,
+                   NULL,
+                   OR_FILEINFO,
+                   "The name of the table which stores URL aliases, default 'urlalias'"),
+
     AP_INIT_FLAG( "URLAliasEngine",
                   cmd_urlaliasengine, 
                   NULL,
                   OR_FILEINFO,
                   "On or Off : enable or disable (default) the URL alias engine"),
 
+    
     { NULL }
 };
 
