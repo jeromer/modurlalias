@@ -3,8 +3,8 @@
 set -e
 
 HTTP_PROTOCOL="http"
-HTTP_HOST="localhost"
-HTTP_PATH="modurlalias"
+HTTP_HOST="modurlalias.loc"
+HTTP_PATH=""
 HTTP_PORT="81"
 
 MYSQL_HOST="localhost"
@@ -54,9 +54,10 @@ ${CMD_MYSQL} -e "${MYSQL_QUERY_NO_REGEX}" | ${BIN_SED} 1d | ${BIN_CUT} -d '	' -f
 
 for url_alias in $(${BIN_CAT} ${URL_ALIAS_LIST_FILENAME})
 do
-    expected_result=${url_alias}
+    #expected_result=${url_alias}
+    expected_result="OK"
     curl_result="$(${CMD_CURL} ${HTTP_PROTOCOL}://${HTTP_HOST}:${HTTP_PORT}/${HTTP_PATH}/${url_alias})"
-    echo -en "Testing URL alias ${COLOR_WHITE}${url_alias}${COLOR_END}  "
+    echo -en "Testing URL alias ${COLOR_WHITE}${HTTP_PROTOCOL}://${HTTP_HOST}:${HTTP_PORT}/${HTTP_PATH}/${url_alias}${COLOR_END}  "
 
     if [ "$expected_result" == "$curl_result" ]
     then
