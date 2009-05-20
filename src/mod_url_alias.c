@@ -36,6 +36,8 @@
 #include "apr_dbd.h"
 #include "mod_dbd.h"
 #include "apr_strings.h"
+#include "http_core.h"
+#include "apr_file_info.h"
 
 #define ENGINE_DISABLED 0
 #define ENGINE_ENABLED  1
@@ -68,33 +70,6 @@ typedef struct {
 module AP_MODULE_DECLARE_DATA urlalias_module;
 
 /*
- * Hook : content handler for internal redirections
- *
- * This function is called after hook_fixup.
- */
-static int hook_handler(request_rec *r)
-{
-    /* using the handler name is not enough to do the job */
-    if (strcmp(r->handler, "urlalias-internal-redirect-handler")) {
-        return DECLINED;
-    }
-
-    /* this comes from hook_fixup and is safer*/
-    if (strncmp(r->filename, "urlalias-redirect:", 18) != 0) {
-        return DECLINED;
-    }
-
-    /* now the internal redirect */
-    ap_internal_redirect(apr_pstrcat(r->pool,
-                                     r->filename+18,
-                                     /* shall we append arguments ? */
-                                     r->args ? "?" : NULL, r->args, NULL),
-                         r);
-
-    return OK;
-}
-
-/*
  * Hook : maps the nice URL to the system one
  *
  * This function does all the source to target mapping stuff
@@ -102,8 +77,11 @@ static int hook_handler(request_rec *r)
  * is handled by hook_handler for the redirection on the
  * real file.
  */
-static int hook_fixup(request_rec *r)
+static int hook_translate_name(request_rec *r)
 {
+    /* The perserver configuration */
+    urlalias_server_config *server_config;
+
     /* The actual database connection */
     ap_dbd_t *dbd = urlalias_dbd_acquire_fn(r);
 
@@ -136,10 +114,13 @@ static int hook_fixup(request_rec *r)
     /* the system URL to redirect to */
     char *target = NULL;
 
-    /* The URL alias has already been rewritten to the system file, skipping */
-    /* Avoids extra an useless table lookups */
-    if( ap_is_initial_req(r) == 0) {
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "skpping %s, URI already rewritten", r->uri);
+    /* this virtual host's document root */
+    const char *document_root = NULL;
+
+    server_config = (urlalias_server_config *) ap_get_module_config(r->server->module_config, &urlalias_module);
+
+    if (server_config->engine_status == ENGINE_DISABLED) {
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "URLALiasEngine is set to Off");
         return DECLINED;
     }
 
@@ -214,14 +195,17 @@ static int hook_fixup(request_rec *r)
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "view       : %s", view);
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "parameters : %s", parameters);
 
-    /* assembling the module/view URL */
+    /* assembling the module/view URL and creating the absolute path to it */
+    document_root = ap_document_root(r);
     target = apr_pstrcat(r->pool,
+                         document_root,
                          DIRECTORY_SEPARATOR, module,
                          DIRECTORY_SEPARATOR, view,
                          NULL);
 
-    r->filename = apr_pstrdup(r->pool, target);
+    r->filename = apr_pstrdup(r->pool, ap_os_escape_path(r->pool, target, 1));
 
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "ap_document_root : %s", ap_document_root(r));
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "target : %s", target);
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->filename : %s", r->filename);
 
@@ -237,18 +221,15 @@ static int hook_fixup(request_rec *r)
     }
 
     /* the filename must be either an absolute local path or an
-    * absolute local URL.
-    */
-    if (*r->filename != '/' && !ap_os_is_path_absolute(r->pool, r->filename)) {
+     * absolute local URL.
+     */
+    if (r->filename[0] != '/' && !ap_os_is_path_absolute(r->pool, r->filename)) {
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "non absolute path : %s", r->filename);
         return HTTP_BAD_REQUEST;
     }
 
-
     /* now we redirect internally to the real filename */
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "internal redirect from %s to %s ", r->uri, r->filename);
-    r->filename = apr_pstrcat(r->pool, "urlalias-redirect:", r->filename, NULL);
-    r->handler = "urlalias-internal-redirect-handler";
 
     return OK;
 }
@@ -300,8 +281,7 @@ static const char *cmd_urlaliasengine(cmd_parms *cmd, void *in_directory_config,
  */
 static void url_alias_register_hooks(apr_pool_t *p)
 {
-    ap_hook_fixups (hook_fixup  , NULL, NULL, APR_HOOK_FIRST);
-    ap_hook_handler(hook_handler, NULL, NULL, APR_HOOK_MIDDLE);
+    ap_hook_translate_name(hook_translate_name, NULL, NULL, APR_HOOK_FIRST);
 }
 
 /*
