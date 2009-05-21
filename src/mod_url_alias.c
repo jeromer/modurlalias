@@ -356,25 +356,25 @@ static const command_rec command_table[] = {
     AP_INIT_TAKE1( "URLAliasInstallationKey",
                    cmd_urlaliasinstallationkey,
                    NULL,
-                   OR_FILEINFO,
+                   RSRC_CONF,
                    "A unique string which is used as an installation key"),
 
     AP_INIT_TAKE1( "URLAliasExcludeFiles",
                    cmd_urlaliasexcludefiles,
                    NULL,
-                   OR_FILEINFO,
+                   RSRC_CONF,
                    "A regular expression which defines which files to ignore, default : .(?:gif|jp[e]?g|png|ico|css|js|mp3|flv)$"),
 
     AP_INIT_TAKE1( "URLAliasTableName",
                    cmd_urlaliastablename,
                    NULL,
-                   OR_FILEINFO,
+                   RSRC_CONF,
                    "The name of the table which stores URL aliases, default 'urlalias'"),
 
     AP_INIT_FLAG( "URLAliasEngine",
                   cmd_urlaliasengine,
                   NULL,
-                  OR_FILEINFO,
+                  RSRC_CONF,
                   "On or Off : enable or disable (default) the URL alias engine"),
 
     { NULL }
