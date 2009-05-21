@@ -63,10 +63,12 @@ static void      (*urlalias_dbd_prepare_fn)(server_rec*, const char*, const char
  * Structure : per <VirtualHost> configuration
  */
 typedef struct {
-    int engine_status;          /* URLAliasEngine */
-    const char *table_name;     /* URLAliasTableName*/
-    const char *regex;          /* URLAliasExcludeFiles */
-    ap_regex_t *compiled_regex; /* Compiled version of URLAliasExcludeFiles */
+    int engine_status;            /* URLAliasEngine */
+    const char *table_name;       /* URLAliasTableName*/
+    const char *regex;            /* URLAliasExcludeFiles */
+    const char *installation_key; /* URLAliasInstallationKey */
+
+    ap_regex_t *compiled_regex;   /* Compiled version of URLAliasExcludeFiles */
 } urlalias_server_config;
 
 /*
@@ -238,9 +240,10 @@ static void *config_server_create(apr_pool_t *p, server_rec *s)
 
     server_config = (urlalias_server_config *) apr_pcalloc(p, sizeof(urlalias_server_config));
 
-    server_config->engine_status  = ENGINE_DISABLED;
-    server_config->table_name     = TABLE_NAME;
-    server_config->regex          = REGEX_FILE_EXT_EXCLUSION;
+    server_config->engine_status    = ENGINE_DISABLED;
+    server_config->table_name       = TABLE_NAME;
+    server_config->regex            = REGEX_FILE_EXT_EXCLUSION;
+    server_config->installation_key = NULL;
 
     compiled_regex = ap_pregcomp(p, REGEX_FILE_EXT_EXCLUSION, AP_REG_EXTENDED | AP_REG_ICASE | AP_REG_NOSUB);
     server_config->compiled_regex = compiled_regex;
@@ -321,6 +324,24 @@ static const char *cmd_urlaliasexcludefiles(cmd_parms *cmd, void *in_directory_c
 
     return NULL;
 }
+
+/*
+ * Conf : installation key
+ */
+static const char *cmd_urlaliasinstallationkey(cmd_parms *cmd, void *in_directory_config, const char *user_installation_key)
+{
+    urlalias_server_config *server_config;
+
+    server_config = ap_get_module_config(cmd->server->module_config, &urlalias_module);
+
+    if (cmd->path == NULL && strlen(user_installation_key) > 0) {
+        /* <VirtualHost> configuration */
+        server_config->installation_key = user_installation_key;
+    }
+
+    return NULL;
+}
+
 /*
  * Hook : global hook table
  */
@@ -333,6 +354,12 @@ static void url_alias_register_hooks(apr_pool_t *p)
  * Conf : configuration directives declaration
  */
 static const command_rec command_table[] = {
+
+    AP_INIT_TAKE1( "URLAliasInstallationKey",
+                   cmd_urlaliasinstallationkey,
+                   NULL,
+                   OR_FILEINFO,
+                   "A unique string which is used as an installation key"),
 
     AP_INIT_TAKE1( "URLAliasExcludeFiles",
                    cmd_urlaliasexcludefiles,
