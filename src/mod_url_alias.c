@@ -63,8 +63,10 @@ static void      (*urlalias_dbd_prepare_fn)(server_rec*, const char*, const char
  * Structure : per <VirtualHost> configuration
  */
 typedef struct {
-    int engine_status;        /* URLAliasEngine */
-    const char *table_name    /* URLAliasTableName*/
+    int engine_status;          /* URLAliasEngine */
+    const char *table_name;     /* URLAliasTableName*/
+    const char *regex;          /* URLAliasExcludeFiles */
+    ap_regex_t *compiled_regex; /* Compiled version of URLAliasExcludeFiles */  
 } urlalias_server_config;
 
 /*
@@ -100,9 +102,6 @@ static int hook_translate_name(request_rec *r)
     /* The result row */
     apr_dbd_row_t *row = NULL;
 
-    /* The compiled regex we want to apply on each requested URI */
-    ap_regex_t *regex = NULL;
-
     /* The regex execution result */
     int regexec_result = AP_REG_NOMATCH;
 
@@ -127,20 +126,12 @@ static int hook_translate_name(request_rec *r)
         return DECLINED;
     }
 
-    /* We ignore the most common binary files */
-    regex = ap_pregcomp(r->pool, REGEX_FILE_EXT_EXCLUSION, AP_REG_EXTENDED | AP_REG_ICASE | AP_REG_NOSUB);
-
-    if( !regex ) {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Unable to compile regex : %s", REGEX_FILE_EXT_EXCLUSION);
-        return DECLINED;
-    }
-
-    regexec_result = ap_regexec(regex, r->uri, AP_MAX_REG_MATCH, regmatch, AP_REG_EXTENDED | AP_REG_ICASE | AP_REG_NOSUB);
+    regexec_result = ap_regexec(server_config->compiled_regex, r->uri, AP_MAX_REG_MATCH, regmatch, AP_REG_EXTENDED | AP_REG_ICASE | AP_REG_NOSUB);
 
     /* regex successfully applied */
     if( regexec_result == 0 ) {
         /* then this request is a binary file which is not relevant for us */
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "%s is a binary file, skipping", r->uri);
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "%s must be ignored, skipping", r->uri);
         return DECLINED;
     }
 
@@ -242,12 +233,17 @@ static int hook_translate_name(request_rec *r)
  */
 static void *config_server_create(apr_pool_t *p, server_rec *s)
 {
+    ap_regex_t *compiled_regex = NULL;
     urlalias_server_config *server_config;
 
     server_config = (urlalias_server_config *) apr_pcalloc(p, sizeof(urlalias_server_config));
 
-    server_config->engine_status = ENGINE_DISABLED;
-    server_config->table_name    = TABLE_NAME;
+    server_config->engine_status  = ENGINE_DISABLED;
+    server_config->table_name     = TABLE_NAME;
+    server_config->regex          = REGEX_FILE_EXT_EXCLUSION;
+
+    compiled_regex = ap_pregcomp(p, REGEX_FILE_EXT_EXCLUSION, AP_REG_EXTENDED | AP_REG_ICASE | AP_REG_NOSUB);
+    server_config->compiled_regex = compiled_regex;
     
     return (void *)server_config;
 }
@@ -292,12 +288,39 @@ static const char *cmd_urlaliastablename(cmd_parms *cmd, void *in_directory_conf
     server_config = ap_get_module_config(cmd->server->module_config, &urlalias_module);
 
     if (cmd->path == NULL && strlen(table_name) > 0) {
+        /* <VirtualHost> configuration */
         server_config->table_name = table_name;
     }
     
     return NULL;
 }
 
+/*
+ * Conf : exclude files
+ */
+static const char *cmd_urlaliasexcludefiles(cmd_parms *cmd, void *in_directory_config, const char *user_regex)
+{
+    ap_regex_t *compiled_regex = NULL;
+    urlalias_server_config *server_config;
+
+    server_config = ap_get_module_config(cmd->server->module_config, &urlalias_module);
+
+    if (cmd->path == NULL && strlen(user_regex) > 0) {
+        /* <VirtualHost> configuration */
+
+        /* Is this regular expression valid ? */
+        compiled_regex = ap_pregcomp(cmd->pool, user_regex, AP_REG_EXTENDED | AP_REG_ICASE | AP_REG_NOSUB);
+
+        if (!compiled_regex) {
+            return "Unable to compile URLAliasExcludeFiles regex, please check that the regular expression is correct";
+        }
+
+        server_config->regex          = user_regex;
+        server_config->compiled_regex = compiled_regex;
+    }
+    
+    return NULL;
+}
 /*
  * Hook : global hook table
  */
@@ -310,6 +333,12 @@ static void url_alias_register_hooks(apr_pool_t *p)
  * Conf : configuration directives declaration
  */
 static const command_rec command_table[] = {
+
+    AP_INIT_TAKE1( "URLAliasExcludeFiles",
+                   cmd_urlaliasexcludefiles,
+                   NULL,
+                   OR_FILEINFO,
+                   "A regular expression which defines which files to ignore, default : .(?:gif|jp[e]?g|png|ico|css|js|mp3|flv)$"),
 
     AP_INIT_TAKE1( "URLAliasTableName",
                    cmd_urlaliastablename,
