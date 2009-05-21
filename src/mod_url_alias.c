@@ -20,10 +20,10 @@
  * +------------+--------------+------+-----+---------+-------+
  * | Field      | Type         | Null | Key | Default | Extra |
  * +------------+--------------+------+-----+---------+-------+
- * | source     | varchar(200) | NO   | PRI |         |       | 
- * | module     | varchar(30)  | NO   |     |         |       | 
- * | view       | varchar(30)  | NO   |     |         |       | 
- * | parameters | varchar(200) | NO   |     |         |       | 
+ * | source     | varchar(200) | NO   | PRI |         |       |
+ * | module     | varchar(30)  | NO   |     |         |       |
+ * | view       | varchar(30)  | NO   |     |         |       |
+ * | parameters | varchar(200) | NO   |     |         |       |
  * +------------+--------------+------+-----+---------+-------+
  **/
 
@@ -66,7 +66,7 @@ typedef struct {
     int engine_status;          /* URLAliasEngine */
     const char *table_name;     /* URLAliasTableName*/
     const char *regex;          /* URLAliasExcludeFiles */
-    ap_regex_t *compiled_regex; /* Compiled version of URLAliasExcludeFiles */  
+    ap_regex_t *compiled_regex; /* Compiled version of URLAliasExcludeFiles */
 } urlalias_server_config;
 
 /*
@@ -129,20 +129,20 @@ static int hook_translate_name(request_rec *r)
     regexec_result = ap_regexec(server_config->compiled_regex, r->uri, AP_MAX_REG_MATCH, regmatch, AP_REG_EXTENDED | AP_REG_ICASE | AP_REG_NOSUB);
 
     /* regex successfully applied */
-    if( regexec_result == 0 ) {
+    if (regexec_result == 0) {
         /* then this request is a binary file which is not relevant for us */
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "%s must be ignored, skipping", r->uri);
         return DECLINED;
     }
 
     /* Extra database connection check */
-    if(dbd == NULL) {
+    if (dbd == NULL) {
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Unable to acquire a database connection ");
         return DECLINED;
     }
 
     /* This is not for us */
-    if( !r->uri || strlen(r->uri) == 0) {
+    if (!r->uri || strlen(r->uri) == 0) {
         return DECLINED;
     }
 
@@ -174,7 +174,7 @@ static int hook_translate_name(request_rec *r)
         return DECLINED;
     }
 
-    if(apr_dbd_get_row(dbd->driver, r->pool, res, &row, 1) == -1) {
+    if (apr_dbd_get_row(dbd->driver, r->pool, res, &row, 1) == -1) {
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "no results found");
         return DECLINED;
     }
@@ -244,7 +244,7 @@ static void *config_server_create(apr_pool_t *p, server_rec *s)
 
     compiled_regex = ap_pregcomp(p, REGEX_FILE_EXT_EXCLUSION, AP_REG_EXTENDED | AP_REG_ICASE | AP_REG_NOSUB);
     server_config->compiled_regex = compiled_regex;
-    
+
     return (void *)server_config;
 }
 
@@ -291,7 +291,7 @@ static const char *cmd_urlaliastablename(cmd_parms *cmd, void *in_directory_conf
         /* <VirtualHost> configuration */
         server_config->table_name = table_name;
     }
-    
+
     return NULL;
 }
 
@@ -318,7 +318,7 @@ static const char *cmd_urlaliasexcludefiles(cmd_parms *cmd, void *in_directory_c
         server_config->regex          = user_regex;
         server_config->compiled_regex = compiled_regex;
     }
-    
+
     return NULL;
 }
 /*
@@ -347,20 +347,19 @@ static const command_rec command_table[] = {
                    "The name of the table which stores URL aliases, default 'urlalias'"),
 
     AP_INIT_FLAG( "URLAliasEngine",
-                  cmd_urlaliasengine, 
+                  cmd_urlaliasengine,
                   NULL,
                   OR_FILEINFO,
                   "On or Off : enable or disable (default) the URL alias engine"),
 
-    
     { NULL }
 };
 
-/* 
+/*
  * Structure : module config global structure
  */
 module AP_MODULE_DECLARE_DATA urlalias_module = {
-    STANDARD20_MODULE_STUFF, 
+    STANDARD20_MODULE_STUFF,
     NULL,                     /* create per-dir    config structures */
     NULL,                     /* merge  per-dir    config structures */
     config_server_create,     /* create per-server config structures */
