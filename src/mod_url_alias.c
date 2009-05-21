@@ -158,8 +158,6 @@ static int hook_translate_name(request_rec *r)
         return DECLINED;
     }
 
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "prepared statement found");
-
     select_error_code = apr_dbd_pvselect(dbd->driver,
                                          r->pool,
                                          dbd->handle,
