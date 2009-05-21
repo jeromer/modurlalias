@@ -42,8 +42,8 @@
 #define ENGINE_DISABLED 0
 #define ENGINE_ENABLED  1
 
-#define SQL_QUERY_PART_1 "SELECT * FROM "
-#define SQL_QUERY_PART_2 " WHERE source = %s"
+#define SQL_SELECT_QUERY_PART_1 "SELECT * FROM "
+#define SQL_SELECT_QUERY_PART_2 " WHERE source = %s"
 #define QUERY_LABEL "urlalias_stmt"
 
 #define DIRECTORY_SEPARATOR "/"
@@ -272,7 +272,7 @@ static const char *cmd_urlaliasengine(cmd_parms *cmd, void *in_directory_config,
         urlalias_dbd_acquire_fn = APR_RETRIEVE_OPTIONAL_FN(ap_dbd_acquire);
     }
 
-    sql_query = apr_pstrcat(cmd->pool, SQL_QUERY_PART_1, server_config->table_name, SQL_QUERY_PART_2, NULL);
+    sql_query = apr_pstrcat(cmd->pool, SQL_SELECT_QUERY_PART_1, server_config->table_name, SQL_SELECT_QUERY_PART_2, NULL);
     urlalias_dbd_prepare_fn(cmd->server, sql_query, QUERY_LABEL);
 
     return NULL;
