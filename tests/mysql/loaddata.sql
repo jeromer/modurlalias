@@ -1,19 +1,3 @@
--- phpMyAdmin SQL Dump
--- version 2.7.0-pl2
--- http://www.phpmyadmin.net
--- 
--- Serveur: localhost
--- Généré le : Mercredi 20 Mai 2009 à 15:28
--- Version du serveur: 5.1.20
--- Version de PHP: 4.4.7
--- 
--- Base de données: `modurlalias`
--- 
-
--- 
--- Contenu de la table `urlalias`
--- 
-
 INSERT INTO `urlalias` VALUES ('/beauty/beauty_history', 'content', 'view.php', 'vm=full&coid=227', 0);
 INSERT INTO `urlalias` VALUES ('/beauty/beauty_history/content', 'content', 'view.php', 'vm=full&coid=233', 0);
 INSERT INTO `urlalias` VALUES ('/beauty/beauty_history/content/10_degrees_of_black_nails', 'content', 'view.php', 'vm=full&coid=755', 0);
