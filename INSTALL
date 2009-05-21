@@ -1,0 +1,77 @@
+Requirements
+------------
+- Apache 2.2
+- mod_dbd http://httpd.apache.org/docs/2.2/mod/mod_dbd.html
+
+Installation steps
+==================
+
+Compiling the module
+--------------------
+Once your have downloaded the module tarball, unpack it.
+Then run the following command : 
+
+1. ./autogen.sh
+2. ./configure --with-apxs=/path/to/apxs
+   or
+   ./configure --with-apxs=`which apxs`
+
+Debian users have to use apxs2 instead of apxs, so they can use the following command :
+
+   ./configure --with-apxs=`which apxs2`
+
+3. make
+4. sudo make install
+
+Loading the module
+------------------
+Once the module is installed you have to load the module in Apache.
+In you httpd.conf, add the following line : 
+
+LoadModule urlalias_module modules/mod_url_alias.so
+
+Creating the default schema
+---------------------------
+mod_url_alias only needs one table, the SQL scripts are available in the 'sql' folder.
+The 'sql' structure is : 
+
+sql
+ +--- dbname
+        +----- schema.sql
+
+For example for MySQL the schema.sql file is available in 
+
+sql/mysql/schema.sql
+
+You only have to load this script in your database, for example for MySQL this would
+give the following command : 
+
+mysql -h <host> -u <user> -p<password> <databasename> < sql/mysql/schema.sql
+
+Creating a VirtualHost
+----------------------
+
+mod_url_alias can be configured on a per VirtualHost basis, a configuration example is
+available in the doc/httpd.conf file :
+
+<VirtualHost *>
+# ... 
+    <IfModule mod_url_alias.c>
+        # Enables the URLAliasEngine, defaul Off
+        URLAliasEngine On
+
+        # Optional if not defined the default table's name will be 'urlalias'
+        URLAliasTableName mytable
+
+        # Optional, default : .(?:gif|jp[e]?g|png|ico|css|js|mp3|flv)$
+        URLAliasExcludeFiles .(?:gif|jp[e]?g|png|ico|css|js|mp3|flv|mpg|avi)$ 
+
+        # You should refer the the mod_dbd documentation to learn
+        # how to define connection parameters for each connection driver
+        # http://httpd.apache.org/docs/2.2/mod/mod_dbd.html#dbdparams
+        # The example below is a working example for MySQL
+        DBDriver mysql
+        DBDParams "host=dbhost port=3306 user=me password=xxxx dbname=mydatabase"
+    </IfModule>
+# ... 
+</VirtualHost>
