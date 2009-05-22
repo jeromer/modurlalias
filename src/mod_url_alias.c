@@ -17,14 +17,15 @@
  *
  *
  * The actual table used
- * +------------+--------------+------+-----+---------+-------+
- * | Field      | Type         | Null | Key | Default | Extra |
- * +------------+--------------+------+-----+---------+-------+
- * | source     | varchar(200) | NO   | PRI |         |       |
- * | module     | varchar(30)  | NO   |     |         |       |
- * | view       | varchar(30)  | NO   |     |         |       |
- * | parameters | varchar(200) | NO   |     |         |       |
- * +------------+--------------+------+-----+---------+-------+
+ * +-------------+--------------+------+-----+---------+-------+
+ * | Field       | Type         | Null | Key | Default | Extra |
+ * +-------------+--------------+------+-----+---------+-------+
+ * | source      | varchar(200) | NO   | PRI |         |       |
+ * | redirect_to | varchar(200) | YES  |     | NULL    |       |
+ * | module      | varchar(30)  | NO   |     |         |       |
+ * | view        | varchar(30)  | NO   |     |         |       |
+ * | parameters  | varchar(200) | NO   |     |         |       |
+ * +-------------+--------------+------+-----+---------+-------+
  **/
 
 #include "httpd.h"
@@ -111,9 +112,10 @@ static int hook_translate_name(request_rec *r)
     ap_regmatch_t regmatch[AP_MAX_REG_MATCH];
 
     /* Table's fields */
-    const char *module     = NULL;
-    const char *view       = NULL;
-    const char *parameters = NULL;
+    const char *redirect_to = NULL;
+    const char *module      = NULL;
+    const char *view        = NULL;
+    const char *parameters  = NULL;
 
     /* the system URL to redirect to */
     char *target = NULL;
@@ -181,13 +183,23 @@ static int hook_translate_name(request_rec *r)
 
     /* since the source field is unique there is only one result */
     /* no need for a loop here                                   */
-    module     = apr_dbd_get_entry(dbd->driver, row, 1);
-    view       = apr_dbd_get_entry(dbd->driver, row, 2);
-    parameters = apr_dbd_get_entry(dbd->driver, row, 3);
+    redirect_to = apr_dbd_get_entry(dbd->driver, row, 1);
+    module      = apr_dbd_get_entry(dbd->driver, row, 2);
+    view        = apr_dbd_get_entry(dbd->driver, row, 3);
+    parameters  = apr_dbd_get_entry(dbd->driver, row, 4);
 
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "module     : %s", module);
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "view       : %s", view);
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "parameters : %s", parameters);
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "redirect_to : %s", redirect_to);
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "module      : %s", module);
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "view        : %s", view);
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "parameters  : %s", parameters);
+
+    /* If a redirection must be done, let's do it now */
+    if (redirect_to != NULL) {
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Must redirect to : %s", redirect_to);
+        r->filename = apr_pstrdup(r->pool, redirect_to);
+        apr_table_setn(r->headers_out, "Location", r->filename);
+        return HTTP_MOVED_PERMANENTLY;
+    }
 
     /* assembling the module/view URL and creating the absolute path to it */
     document_root = ap_document_root(r);
