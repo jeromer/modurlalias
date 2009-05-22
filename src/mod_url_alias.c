@@ -357,7 +357,7 @@ static const char *cmd_urlaliasinstallationkey(cmd_parms *cmd, void *in_director
  */
 static void url_alias_register_hooks(apr_pool_t *p)
 {
-    ap_hook_translate_name(hook_translate_name, NULL, NULL, APR_HOOK_FIRST);
+    ap_hook_translate_name(hook_translate_name, NULL, NULL, APR_HOOK_MIDDLE);
 }
 
 /*
