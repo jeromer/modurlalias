@@ -43,9 +43,11 @@
 #define ENGINE_DISABLED 0
 #define ENGINE_ENABLED  1
 
-#define SQL_SELECT_QUERY_PART_1 "SELECT * FROM "
-#define SQL_SELECT_QUERY_PART_2 " WHERE source = %s"
+#define SQL_SELECT_URL_ALIAS_QUERY_PART_1 "SELECT * FROM "
+#define SQL_SELECT_URL_ALIAS_QUERY_PART_2 " WHERE source = %s"
+#define SQL_SELECT_URL_ALIAS_QUERY_PART_3 " WHERE generic_route = 1 ORDER BY route_priority"
 #define QUERY_LABEL "urlalias_stmt"
+#define QUERY_LABEL_GENERIC_ROUTE "urlalias_generic_route_stmt"
 
 #define DIRECTORY_SEPARATOR "/"
 
@@ -112,10 +114,11 @@ static int hook_translate_name(request_rec *r)
     ap_regmatch_t regmatch[AP_MAX_REG_MATCH];
 
     /* Table's fields */
-    const char *redirect_to = NULL;
-    const char *module      = NULL;
-    const char *view        = NULL;
-    const char *parameters  = NULL;
+    const char *generic_route = NULL;
+    const char *redirect_to   = NULL;
+    const char *module        = NULL;
+    const char *view          = NULL;
+    const char *parameters    = NULL;
 
     /* the system URL to redirect to */
     char *target = NULL;
@@ -151,6 +154,100 @@ static int hook_translate_name(request_rec *r)
     }
 
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->uri : %s", r->uri);
+
+    prepared_stmt = apr_hash_get(dbd->prepared, QUERY_LABEL_GENERIC_ROUTE, APR_HASH_KEY_STRING);
+    ap_regex_t *compiled_regex = NULL; 
+
+    /* the prepared statement disapearred */
+    if (prepared_stmt == NULL) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "A prepared statement could not be found");
+        return DECLINED;
+    }
+
+    select_error_code = apr_dbd_pvselect(dbd->driver,
+                                         r->pool,
+                                         dbd->handle,
+                                         &res,
+                                         prepared_stmt,
+                                         0,
+                                         r->uri,
+                                         NULL);
+
+    if (select_error_code != 0) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+                      "Query execution error looking up '%s' "
+                      "in database", r->uri);
+        return DECLINED;
+    }
+
+    while( apr_dbd_get_row(dbd->driver, r->pool, res, &row, -1) == 0) {
+        /* a generic route is a "source" field with the generic_route flag set to 1 */
+        generic_route = apr_dbd_get_entry(dbd->driver, row, 0);
+
+        /* TODO : escape the '&' char */
+        parameters = apr_dbd_get_entry(dbd->driver, row, 4);
+        module     = apr_dbd_get_entry(dbd->driver, row, 2);
+        view       = apr_dbd_get_entry(dbd->driver, row, 3);
+
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "generic route : %s", generic_route);
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "parameters : %s", parameters);
+
+        compiled_regex = ap_pregcomp(r->pool, generic_route, AP_REG_EXTENDED | AP_REG_ICASE);
+
+        if (!compiled_regex) {
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Unable to compile generic route : %s", generic_route);
+            continue;
+        }
+
+        regexec_result = ap_regexec(compiled_regex, r->uri, AP_MAX_REG_MATCH, regmatch, AP_REG_EXTENDED | AP_REG_ICASE);
+
+        if (regexec_result == 0) {
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "%s succesfully applied on %s", generic_route, r->uri);
+
+            const char *subs;
+            subs = ap_pregsub(r->pool, parameters, r->uri, AP_MAX_REG_MATCH, regmatch);
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "subs : %s", subs);
+
+            /* assembling the module/view URL and creating the absolute path to it */
+            document_root = ap_document_root(r);
+            target = apr_pstrcat(r->pool,
+                                document_root,
+                                DIRECTORY_SEPARATOR, module,
+                                DIRECTORY_SEPARATOR, view,
+                                NULL);
+
+            r->filename = apr_pstrdup(r->pool, ap_os_escape_path(r->pool, target, 1));
+
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "ap_document_root : %s", ap_document_root(r));
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "target : %s", target);
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->filename : %s", r->filename);
+
+            /* adding parameters to our request */
+            r->args = apr_pstrdup(r->pool, subs);
+
+            /* avoid deadlooping */
+            if (strcmp(r->uri, target) == 0) {
+                ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "deadlooping URI : %s on target : %s ", r->uri, target);
+                return HTTP_BAD_REQUEST;
+            }
+
+            /* the filename must be either an absolute local path or an
+            * absolute local URL.
+            */
+            if (r->filename[0] != '/' && !ap_os_is_path_absolute(r->pool, r->filename)) {
+                ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "non absolute path : %s", r->filename);
+                return HTTP_BAD_REQUEST;
+            }
+
+            /* now we redirect internally to the real filename */
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "internal redirect from %s to %s ", r->uri, r->filename);
+
+            return OK;
+        } else {
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "failed to apply %s on %s", generic_route, r->uri);
+            continue;
+        }
+    }
 
     prepared_stmt = apr_hash_get(dbd->prepared, QUERY_LABEL, APR_HASH_KEY_STRING);
 
@@ -285,8 +382,17 @@ static const char *cmd_urlaliasengine(cmd_parms *cmd, void *in_directory_config,
         urlalias_dbd_acquire_fn = APR_RETRIEVE_OPTIONAL_FN(ap_dbd_acquire);
     }
 
-    sql_query = apr_pstrcat(cmd->pool, SQL_SELECT_QUERY_PART_1, server_config->table_name, SQL_SELECT_QUERY_PART_2, NULL);
+    /* The sstandard SQL query */
+    sql_query = apr_pstrcat(cmd->pool, SQL_SELECT_URL_ALIAS_QUERY_PART_1, server_config->table_name, SQL_SELECT_URL_ALIAS_QUERY_PART_2, NULL);
     urlalias_dbd_prepare_fn(cmd->server, sql_query, QUERY_LABEL);
+
+    /* The generic routes SQL query */
+    sql_query = apr_pstrcat(cmd->pool,
+                            SQL_SELECT_URL_ALIAS_QUERY_PART_1,
+                            server_config->table_name,
+                            SQL_SELECT_URL_ALIAS_QUERY_PART_3,
+                            NULL);
+    urlalias_dbd_prepare_fn(cmd->server, sql_query, QUERY_LABEL_GENERIC_ROUTE);
 
     return NULL;
 }
