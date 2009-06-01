@@ -80,6 +80,58 @@ typedef struct {
 module AP_MODULE_DECLARE_DATA urlalias_module;
 
 /*
+ * Helper : generates the SQL query depending on
+ *          the context : generic route or not
+ */
+static const char *gen_sql_query(apr_pool_t *p, urlalias_server_config *server_config, char *query_type)
+{
+    if ( query_type && query_type == "generic_routes") {
+        return apr_pstrcat(p, SQL_SELECT_URL_ALIAS_QUERY_PART_1, server_config->table_name, SQL_SELECT_URL_ALIAS_QUERY_PART_3, NULL);
+    }
+
+    return apr_pstrcat(p, SQL_SELECT_URL_ALIAS_QUERY_PART_1, server_config->table_name, SQL_SELECT_URL_ALIAS_QUERY_PART_2, NULL);
+}
+
+/*
+ * Helper : checks if a redirection is needed for the current URI
+ *
+ */
+static bool must_redirect(request_rec *r, const char *redirect_to)
+{
+    if (redirect_to != NULL) {
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Must redirect to : %s", redirect_to);
+        r->filename = apr_pstrdup(r->pool, redirect_to);
+        apr_table_setn(r->headers_out, "Location", r->filename);
+        return true;
+    }
+
+    return false;
+}
+
+/*
+ * Helper : checks if we must exclude this URI as configured
+ *          in URLAliasExcludeFiles
+ */
+static bool must_ignore_uri(request_rec *r, urlalias_server_config *server_config)
+{
+    /* The regex execution result */
+    int regexec_result = AP_REG_NOMATCH;
+
+    /* The list of regex captures */
+    ap_regmatch_t regmatch[AP_MAX_REG_MATCH];
+
+    regexec_result = ap_regexec(server_config->compiled_regex, r->uri, AP_MAX_REG_MATCH, regmatch, AP_REG_EXTENDED | AP_REG_ICASE | AP_REG_NOSUB);
+
+    /* regex successfully applied */
+    if (regexec_result == 0) {
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "%s must be ignored, skipping", r->uri);
+        return true;
+    }
+
+    return false;
+}
+
+/*
  * Hook : maps the nice URL to the system one
  *
  * This function does all the source to target mapping stuff
@@ -133,12 +185,7 @@ static int hook_translate_name(request_rec *r)
         return DECLINED;
     }
 
-    regexec_result = ap_regexec(server_config->compiled_regex, r->uri, AP_MAX_REG_MATCH, regmatch, AP_REG_EXTENDED | AP_REG_ICASE | AP_REG_NOSUB);
-
-    /* regex successfully applied */
-    if (regexec_result == 0) {
-        /* then this request is a binary file which is not relevant for us */
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "%s must be ignored, skipping", r->uri);
+    if (must_ignore_uri(r, server_config)) {
         return DECLINED;
     }
 
@@ -156,7 +203,7 @@ static int hook_translate_name(request_rec *r)
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->uri : %s", r->uri);
 
     prepared_stmt = apr_hash_get(dbd->prepared, QUERY_LABEL_GENERIC_ROUTE, APR_HASH_KEY_STRING);
-    ap_regex_t *compiled_regex = NULL; 
+    ap_regex_t *compiled_regex = NULL;
 
     /* the prepared statement disapearred */
     if (prepared_stmt == NULL) {
@@ -291,13 +338,11 @@ static int hook_translate_name(request_rec *r)
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "parameters  : %s", parameters);
 
     /* If a redirection must be done, let's do it now */
-    if (redirect_to != NULL) {
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Must redirect to : %s", redirect_to);
-        r->filename = apr_pstrdup(r->pool, redirect_to);
-        apr_table_setn(r->headers_out, "Location", r->filename);
+    if (must_redirect(r, redirect_to)) {
+        /* all the redirection work is done in must_redirect */
         return HTTP_MOVED_PERMANENTLY;
     }
-
+    
     /* assembling the module/view URL and creating the absolute path to it */
     document_root = ap_document_root(r);
     target = apr_pstrcat(r->pool,
@@ -383,15 +428,11 @@ static const char *cmd_urlaliasengine(cmd_parms *cmd, void *in_directory_config,
     }
 
     /* The sstandard SQL query */
-    sql_query = apr_pstrcat(cmd->pool, SQL_SELECT_URL_ALIAS_QUERY_PART_1, server_config->table_name, SQL_SELECT_URL_ALIAS_QUERY_PART_2, NULL);
+    sql_query = gen_sql_query(cmd->pool, server_config, "standard_query");
     urlalias_dbd_prepare_fn(cmd->server, sql_query, QUERY_LABEL);
 
     /* The generic routes SQL query */
-    sql_query = apr_pstrcat(cmd->pool,
-                            SQL_SELECT_URL_ALIAS_QUERY_PART_1,
-                            server_config->table_name,
-                            SQL_SELECT_URL_ALIAS_QUERY_PART_3,
-                            NULL);
+    sql_query = gen_sql_query(cmd->pool, server_config, "generic_routes");
     urlalias_dbd_prepare_fn(cmd->server, sql_query, QUERY_LABEL_GENERIC_ROUTE);
 
     return NULL;
