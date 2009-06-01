@@ -132,6 +132,27 @@ static bool must_ignore_uri(request_rec *r, urlalias_server_config *server_confi
 }
 
 /*
+ * Helper : creates the absolute path of the target
+ */
+static const char *gen_target_path(request_rec *r, const char *module, const char *view)
+{
+    /* this virtual host's document root */
+    const char *document_root = NULL;
+
+    /* the system URL to redirect to */
+    char *target = NULL;
+
+    document_root = ap_document_root(r);
+    target = apr_pstrcat(r->pool,
+                         document_root,
+                         DIRECTORY_SEPARATOR, module,
+                         DIRECTORY_SEPARATOR, view,
+                         NULL);
+
+    return target;
+}
+
+/*
  * Hook : maps the nice URL to the system one
  *
  * This function does all the source to target mapping stuff
@@ -173,10 +194,7 @@ static int hook_translate_name(request_rec *r)
     const char *parameters    = NULL;
 
     /* the system URL to redirect to */
-    char *target = NULL;
-
-    /* this virtual host's document root */
-    const char *document_root = NULL;
+    const char *target = NULL;
 
     server_config = (urlalias_server_config *) ap_get_module_config(r->server->module_config, &urlalias_module);
 
@@ -256,13 +274,7 @@ static int hook_translate_name(request_rec *r)
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "subs : %s", subs);
 
             /* assembling the module/view URL and creating the absolute path to it */
-            document_root = ap_document_root(r);
-            target = apr_pstrcat(r->pool,
-                                document_root,
-                                DIRECTORY_SEPARATOR, module,
-                                DIRECTORY_SEPARATOR, view,
-                                NULL);
-
+            target = gen_target_path(r, module, view);
             r->filename = apr_pstrdup(r->pool, ap_os_escape_path(r->pool, target, 1));
 
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "ap_document_root : %s", ap_document_root(r));
@@ -344,13 +356,7 @@ static int hook_translate_name(request_rec *r)
     }
     
     /* assembling the module/view URL and creating the absolute path to it */
-    document_root = ap_document_root(r);
-    target = apr_pstrcat(r->pool,
-                         document_root,
-                         DIRECTORY_SEPARATOR, module,
-                         DIRECTORY_SEPARATOR, view,
-                         NULL);
-
+    target = gen_target_path(r, module, view);
     r->filename = apr_pstrdup(r->pool, ap_os_escape_path(r->pool, target, 1));
 
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "ap_document_root : %s", ap_document_root(r));
