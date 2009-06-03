@@ -148,7 +148,9 @@ static int init_cache(apr_pool_t *pchild, server_rec *svr)
     }
 #endif
 
+#ifdef URL_ALIAS_DEBUG_ENABLED
     ap_log_error(APLOG_MARK, APLOG_DEBUG, rv, svr, "Subpool and mutex created successfully");
+#endif
 
     generic_route_cache_p->cache_item_list = apr_hash_make(generic_route_cache_p->pool);
     generic_route_cache_p->cache_generated = 0;
@@ -199,6 +201,7 @@ static int set_cache_value(const char *key,
     return APR_SUCCESS;
 }
 
+#ifdef URL_ALIAS_DEBUG_ENABLED
 /*
  * Helper : Dumps route map cache contents
  */
@@ -226,6 +229,7 @@ static void dump_cache_contents(request_rec *r)
 
     return;
 }
+#endif
 
 /* }}} */
 
@@ -255,7 +259,9 @@ static const char *gen_sql_query(apr_pool_t *p, urlalias_server_config *server_c
 static int must_redirect(request_rec *r, const char *redirect_to)
 {
     if (redirect_to != NULL) {
+#ifdef URL_ALIAS_DEBUG_ENABLED
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Must redirect to : %s", redirect_to);
+#endif
         r->filename = apr_pstrdup(r->pool, redirect_to);
         apr_table_setn(r->headers_out, "Location", r->filename);
         return 1;
@@ -280,7 +286,9 @@ static int must_ignore_uri(request_rec *r, urlalias_server_config *server_config
 
     /* regex successfully applied */
     if (regexec_result == 0) {
+#ifdef URL_ALIAS_DEBUG_ENABLED
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "%s must be ignored, skipping", r->uri);
+#endif
         return 1;
     }
 
@@ -332,10 +340,11 @@ static int hook_post_read_request(request_rec *r)
 {
     /* The cache has already been generated */
     if (generic_route_cache_p->cache_generated == 1) {
+#ifdef URL_ALIAS_DEBUG_ENABLED
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Cache already generated, skipping");
 
         dump_cache_contents(r);
-
+#endif
         return OK;
     }
 
@@ -368,7 +377,9 @@ static int hook_post_read_request(request_rec *r)
     server_config = (urlalias_server_config *) ap_get_module_config(r->server->module_config, &urlalias_module);
 
     if (server_config->engine_status == ENGINE_DISABLED) {
+#ifdef URL_ALIAS_DEBUG_ENABLED
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "URLALiasEngine is set to Off");
+#endif
         return DECLINED;
     }
 
@@ -386,7 +397,9 @@ static int hook_post_read_request(request_rec *r)
         return DECLINED;
     }
 
+#ifdef URL_ALIAS_DEBUG_ENABLED
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Populating cache with generic routes");
+#endif
 
     select_error_code = apr_dbd_pvselect(dbd->driver, r->pool, dbd->handle, &res,
                                          prepared_stmt, 0, NULL);
@@ -405,8 +418,10 @@ static int hook_post_read_request(request_rec *r)
         module     = apr_dbd_get_entry(dbd->driver, row, 2);
         view       = apr_dbd_get_entry(dbd->driver, row, 3);
 
+#ifdef URL_ALIAS_DEBUG_ENABLED
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "generic route : %s", generic_route);
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "parameters : %s", parameters);
+#endif
 
         /*
          * Storing the generic route in the cache for future use
@@ -477,7 +492,9 @@ static int hook_translate_name(request_rec *r)
     server_config = (urlalias_server_config *) ap_get_module_config(r->server->module_config, &urlalias_module);
 
     if (server_config->engine_status == ENGINE_DISABLED) {
+#ifdef URL_ALIAS_DEBUG_ENABLED
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "URLALiasEngine is set to Off");
+#endif
         return DECLINED;
     }
 
@@ -496,7 +513,9 @@ static int hook_translate_name(request_rec *r)
         return DECLINED;
     }
 
+#ifdef URL_ALIAS_DEBUG_ENABLED
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->uri : %s", r->uri);
+#endif
 
     ap_regex_t *compiled_regex = NULL;
 
@@ -508,7 +527,9 @@ static int hook_translate_name(request_rec *r)
         apr_hash_this(hi, (void*) &key, NULL, &val);
         cache_item = val;
 
+#ifdef URL_ALIAS_DEBUG_ENABLED
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Compiling : %s", cache_item->generic_route);
+#endif
         compiled_regex = ap_pregcomp(r->pool, cache_item->generic_route, AP_REG_EXTENDED | AP_REG_ICASE);
 
         if (!compiled_regex) {
@@ -519,24 +540,32 @@ static int hook_translate_name(request_rec *r)
         regexec_result = ap_regexec(compiled_regex, r->uri, AP_MAX_REG_MATCH, regmatch, AP_REG_EXTENDED | AP_REG_ICASE);
 
         if (regexec_result == 0) {
+#ifdef URL_ALIAS_DEBUG_ENABLED
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "%s succesfully applied on %s", cache_item->generic_route, r->uri);
+#endif
 
             const char *subs;
             subs = ap_pregsub(r->pool, cache_item->parameters, r->uri, AP_MAX_REG_MATCH, regmatch);
+#ifdef URL_ALIAS_DEBUG_ENABLED
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "subs : %s", subs);
+#endif
 
             /* assembling the module/view URL and creating the absolute path to it */
             target = gen_target_path(r, cache_item->module, cache_item->view);
             r->filename = apr_pstrdup(r->pool, ap_os_escape_path(r->pool, target, 1));
 
+#ifdef URL_ALIAS_DEBUG_ENABLED
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "ap_document_root : %s", ap_document_root(r));
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "target : %s", target);
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->filename : %s", r->filename);
+#endif
 
             /* adding parameters to our request */
             r->args = apr_pstrdup(r->pool, subs);
 
+#ifdef URL_ALIAS_DEBUG_ENABLED
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->args : %s", r->args);
+#endif
 
             /* avoid deadlooping */
             if (strcmp(r->uri, target) == 0) {
@@ -552,8 +581,10 @@ static int hook_translate_name(request_rec *r)
                 return HTTP_BAD_REQUEST;
             }
 
+#ifdef URL_ALIAS_DEBUG_ENABLED
             /* now we redirect internally to the real filename */
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "internal redirect from %s to %s ", r->uri, r->filename);
+#endif
 
             return OK;
         }
@@ -584,7 +615,9 @@ static int hook_translate_name(request_rec *r)
     }
 
     if (apr_dbd_get_row(dbd->driver, r->pool, res, &row, 1) == -1) {
+#ifdef URL_ALIAS_DEBUG_ENABLED
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "no results found");
+#endif
         return DECLINED;
     }
 
@@ -595,10 +628,12 @@ static int hook_translate_name(request_rec *r)
     view        = apr_dbd_get_entry(dbd->driver, row, 3);
     parameters  = apr_dbd_get_entry(dbd->driver, row, 4);
 
+#ifdef URL_ALIAS_DEBUG_ENABLED
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "redirect_to : %s", redirect_to);
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "module      : %s", module);
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "view        : %s", view);
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "parameters  : %s", parameters);
+#endif
 
     /* If a redirection must be done, let's do it now */
     if (must_redirect(r, redirect_to)) {
@@ -610,14 +645,18 @@ static int hook_translate_name(request_rec *r)
     target = gen_target_path(r, module, view);
     r->filename = apr_pstrdup(r->pool, ap_os_escape_path(r->pool, target, 1));
 
+#ifdef URL_ALIAS_DEBUG_ENABLED
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "ap_document_root : %s", ap_document_root(r));
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "target : %s", target);
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->filename : %s", r->filename);
+#endif
 
     /* adding parameters to our request */
     r->args = apr_pstrdup(r->pool, parameters);
 
+#ifdef URL_ALIAS_DEBUG_ENABLED
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->args : %s", r->args);
+#endif
 
     /* avoid deadlooping */
     if (strcmp(r->uri, target) == 0) {
@@ -634,7 +673,9 @@ static int hook_translate_name(request_rec *r)
     }
 
     /* now we redirect internally to the real filename */
+#ifdef URL_ALIAS_DEBUG_ENABLED
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "internal redirect from %s to %s ", r->uri, r->filename);
+#endif
 
     return OK;
 }
