@@ -258,7 +258,7 @@ static void dump_cache_contents(request_rec *r)
  */
 static const char *gen_sql_query(apr_pool_t *p, urlalias_server_config *server_config, char *query_type)
 {
-    if ( query_type && query_type == "generic_routes") {
+    if (strcmp(query_type, "generic_routes") == 0) {
         return apr_pstrcat(p, SQL_SELECT_URL_ALIAS_QUERY_PART_1, server_config->table_name, SQL_SELECT_URL_ALIAS_QUERY_PART_3, NULL);
     }
 
@@ -273,23 +273,23 @@ static const char *gen_sql_query(apr_pool_t *p, urlalias_server_config *server_c
  * Helper : checks if a redirection is needed for the current URI
  *
  */
-static bool must_redirect(request_rec *r, const char *redirect_to)
+static int must_redirect(request_rec *r, const char *redirect_to)
 {
     if (redirect_to != NULL) {
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Must redirect to : %s", redirect_to);
         r->filename = apr_pstrdup(r->pool, redirect_to);
         apr_table_setn(r->headers_out, "Location", r->filename);
-        return true;
+        return 1;
     }
 
-    return false;
+    return 0;
 }
 
 /*
  * Helper : checks if we must exclude this URI as configured
  *          in URLAliasExcludeFiles
  */
-static bool must_ignore_uri(request_rec *r, urlalias_server_config *server_config)
+static int must_ignore_uri(request_rec *r, urlalias_server_config *server_config)
 {
     /* The regex execution result */
     int regexec_result = AP_REG_NOMATCH;
@@ -302,10 +302,10 @@ static bool must_ignore_uri(request_rec *r, urlalias_server_config *server_confi
     /* regex successfully applied */
     if (regexec_result == 0) {
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "%s must be ignored, skipping", r->uri);
-        return true;
+        return 1;
     }
 
-    return false;
+    return 0;
 }
 
 /*
@@ -442,7 +442,7 @@ static int hook_post_read_request(request_rec *r)
         }
     }
 
-    generic_route_cache_p->cache_generated = true;
+    generic_route_cache_p->cache_generated = 1;
 
     return OK;
 }
