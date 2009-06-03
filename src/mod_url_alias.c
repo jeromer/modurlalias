@@ -75,9 +75,182 @@ typedef struct {
 } urlalias_server_config;
 
 /*
+ * Structure : the per-child cache
+ */
+typedef struct generic_route_cache {
+    apr_pool_t         *pool;
+    apr_hash_t         *cache_item_list;
+#if APR_HAS_THREADS
+    apr_thread_mutex_t *mutex;
+#endif
+    /* Flag 0|1 to know if the cached has already been generated or not */
+    int cache_generated;
+} generic_route_cache;
+
+/*
+ * Structure : cache item for each generic route
+ *
+ * This structure is a child of the generic_route_cache
+ *
+ * generic_route_cache
+ *      |
+ *      + cache_item_list
+ *            |
+ *            + route_cache_item
+ *                   | - generic_route
+ *                   | - module
+ *                   | - view
+ *                   | - parameters
+ *
+ */
+typedef struct {
+    const char *generic_route;
+    const char *module;
+    const char *view;
+    const char *parameters;
+} route_cache_item;
+
+/*
  * Structure : global data structure declaration
  */
 module AP_MODULE_DECLARE_DATA urlalias_module;
+
+/*
+ * The cache
+ */
+static generic_route_cache *generic_route_cache_p;
+
+/* {{{ caching support */
+
+/*
+ * Helper : creates the per child generic route cache
+ */
+static int init_cache(apr_pool_t *pchild, server_rec *svr)
+{
+    apr_status_t rv;
+    generic_route_cache_p = apr_palloc(pchild, sizeof(generic_route_cache));
+
+    rv = apr_pool_create(&generic_route_cache_p->pool, pchild);
+
+    if (rv != APR_SUCCESS) {
+        ap_log_perror(APLOG_MARK, APLOG_CRIT, rv, pchild, "Failed to create subpool, cache is disabled");
+        generic_route_cache_p = NULL;
+        return 1;
+    }
+
+#if APR_HAS_THREADS
+    rv = apr_thread_mutex_create(&generic_route_cache_p->mutex, APR_THREAD_MUTEX_DEFAULT, pchild);
+
+    if (rv != APR_SUCCESS) {
+        ap_log_perror(APLOG_MARK, APLOG_CRIT, rv, pchild, "Failed to create mutex lock, cache is disabled");
+        generic_route_cache_p = NULL;
+        return 1;
+    }
+#endif
+
+    ap_log_error(APLOG_MARK, APLOG_DEBUG, rv, svr, "Subpool and mutex created successfully");
+
+    generic_route_cache_p->cache_item_list = apr_hash_make(generic_route_cache_p->pool);
+    generic_route_cache_p->cache_generated = 0;
+
+    return APR_SUCCESS;
+}
+
+/*
+ * Helper : stores a generic route in the per child cache
+ */
+static int set_cache_value(const char *key, 
+                            const char *module,
+                            const char *view,
+                            const char *parameters)
+{
+    route_cache_item *cache_item;
+
+    if (generic_route_cache_p) {
+
+#if APR_HAS_THREADS
+        apr_thread_mutex_lock(generic_route_cache_p->mutex);
+#endif
+
+        cache_item = apr_hash_get(generic_route_cache_p->cache_item_list, key, APR_HASH_KEY_STRING);
+
+        /* This item does not exist */
+        if (cache_item == NULL) {
+
+            cache_item = (route_cache_item *) apr_palloc(generic_route_cache_p->pool, sizeof(route_cache_item));
+
+            cache_item->generic_route = apr_pstrdup(generic_route_cache_p->pool, key);
+            cache_item->module        = apr_pstrdup(generic_route_cache_p->pool, module);
+            cache_item->view          = apr_pstrdup(generic_route_cache_p->pool, view);
+            cache_item->parameters    = apr_pstrdup(generic_route_cache_p->pool, parameters);
+
+            apr_hash_set(generic_route_cache_p->cache_item_list,
+                         apr_pstrdup(generic_route_cache_p->pool, key),
+                         APR_HASH_KEY_STRING,
+                         cache_item);
+
+        }
+        
+#if APR_HAS_THREADS
+        apr_thread_mutex_unlock(generic_route_cache_p->mutex);
+#endif
+    }
+
+    return APR_SUCCESS;
+}
+
+/*
+ * Helper : fetches a generic route in the per child cache
+ */
+static route_cache_item *get_cache_value(char *key)
+{
+    route_cache_item *cache_item = NULL;
+
+    if (generic_route_cache_p) {
+#if APR_HAS_THREADS
+        apr_thread_mutex_lock(generic_route_cache_p->mutex);
+#endif
+         cache_item = (route_cache_item *) apr_hash_get(generic_route_cache_p->cache_item_list, key, APR_HASH_KEY_STRING);
+
+#if APR_HAS_THREADS
+        apr_thread_mutex_unlock(generic_route_cache_p->mutex);
+#endif
+    }
+
+    return cache_item;
+}
+
+/*
+ * Helper : Dumps route map cache contents
+ */
+static void dump_cache_contents(request_rec *r)
+{
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Current cache contents : ");
+
+    apr_hash_index_t *hi;
+
+    for (hi = apr_hash_first(generic_route_cache_p->pool, generic_route_cache_p->cache_item_list);
+         hi;
+         hi = apr_hash_next(hi)){
+        const char *key;
+        void *val;
+        route_cache_item *cache_item;
+
+        apr_hash_this(hi, (void*) &key, NULL, &val);
+        cache_item = val;
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "key : %s", key);
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "cache_item->generic_route : %s", cache_item->generic_route);
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "cache_item->module        : %s", cache_item->module);
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "cache_item->view          : %s", cache_item->view);
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "cache_item->parameters    : %s", cache_item->parameters);
+    }
+
+    return;
+}
+
+/* }}} */
+
+/* {{{ SQL query support */
 
 /*
  * Helper : generates the SQL query depending on
@@ -91,6 +264,10 @@ static const char *gen_sql_query(apr_pool_t *p, urlalias_server_config *server_c
 
     return apr_pstrcat(p, SQL_SELECT_URL_ALIAS_QUERY_PART_1, server_config->table_name, SQL_SELECT_URL_ALIAS_QUERY_PART_2, NULL);
 }
+
+/* }}} */
+
+/* {{{ Misc helpers */
 
 /*
  * Helper : checks if a redirection is needed for the current URI
@@ -152,6 +329,124 @@ static const char *gen_target_path(request_rec *r, const char *module, const cha
     return target;
 }
 
+/* }}} */
+
+/*
+ * Hook : initializes the per child cache struct
+ */
+static void hook_child_init(apr_pool_t *pchild, server_rec *svr)
+{
+    apr_status_t rv;
+    
+    rv = init_cache(pchild, svr);
+
+    if (rv != APR_SUCCESS) {
+        ap_log_perror(APLOG_MARK, APLOG_ERR, rv, pchild, "An error occured during child_init");
+    }
+}
+
+/*
+ * Hook : populates the cache with pre compiled generic routes
+ *        the cache will be populated only once
+ */
+static int hook_post_read_request(request_rec *r)
+{
+    /* The cache has already been generated */
+    if (generic_route_cache_p->cache_generated == 1) {
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Cache already generated, skipping");
+
+        dump_cache_contents(r);
+
+        return OK;
+    }
+
+    /* The perserver configuration */
+    urlalias_server_config *server_config;
+
+    /* The actual database connection */
+    ap_dbd_t *dbd = urlalias_dbd_acquire_fn(r);
+
+    /* The prepared statement for our SQL query */
+    apr_dbd_prepared_t *prepared_stmt = NULL;
+
+    /* The error code of execution of our SQL query */
+    apr_int16_t select_error_code = -1;
+
+    /* The result set */
+    apr_dbd_results_t *res = NULL;
+
+    /* The result row */
+    apr_dbd_row_t *row = NULL;
+
+    /* Table's fields */
+    const char *generic_route = NULL;
+    const char *module        = NULL;
+    const char *view          = NULL;
+    const char *parameters    = NULL;
+
+    apr_status_t rv;
+
+    server_config = (urlalias_server_config *) ap_get_module_config(r->server->module_config, &urlalias_module);
+
+    if (server_config->engine_status == ENGINE_DISABLED) {
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "URLALiasEngine is set to Off");
+        return DECLINED;
+    }
+
+    /* Extra database connection check */
+    if (dbd == NULL) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Unable to acquire a database connection ");
+        return DECLINED;
+    }
+
+    prepared_stmt = apr_hash_get(dbd->prepared, QUERY_LABEL_GENERIC_ROUTE, APR_HASH_KEY_STRING);
+
+    /* the prepared statement disapearred */
+    if (prepared_stmt == NULL) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "A prepared statement could not be found");
+        return DECLINED;
+    }
+
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Populating cache with generic routes");
+
+    select_error_code = apr_dbd_pvselect(dbd->driver, r->pool, dbd->handle, &res,
+                                         prepared_stmt, 0, NULL);
+
+    if (select_error_code != 0) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Query execution error looking up '%s' in database", r->uri);
+        return DECLINED;
+    }
+
+    while (apr_dbd_get_row(dbd->driver, r->pool, res, &row, -1) == 0) {
+        /* a generic route is a "source" field with the generic_route flag set to 1 */
+        generic_route = apr_dbd_get_entry(dbd->driver, row, 0);
+
+        /* TODO : escape the '&' char */
+        parameters = apr_dbd_get_entry(dbd->driver, row, 4);
+        module     = apr_dbd_get_entry(dbd->driver, row, 2);
+        view       = apr_dbd_get_entry(dbd->driver, row, 3);
+
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "generic route : %s", generic_route);
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "parameters : %s", parameters);
+
+        /*
+         * Storing the generic route in the cache for future use
+         * This should avoid fetching all the generic routes for each request
+         * and thus save a few SQL queries.
+         */
+        rv = set_cache_value(generic_route, module, view, parameters);
+
+        if (rv != APR_SUCCESS) {
+            ap_log_rerror(APLOG_MARK, APLOG_ERR, rv, r, "Unable to store generic route '%s' in the cache", generic_route);
+            continue;
+        }
+    }
+
+    generic_route_cache_p->cache_generated = true;
+
+    return OK;
+}
+
 /*
  * Hook : maps the nice URL to the system one
  *
@@ -196,10 +491,19 @@ static int hook_translate_name(request_rec *r)
     /* the system URL to redirect to */
     const char *target = NULL;
 
+    /* the cached generic routes */
+    apr_hash_index_t *hi_first = apr_hash_first(generic_route_cache_p->pool, generic_route_cache_p->cache_item_list);
+    apr_hash_index_t *hi;
+
     server_config = (urlalias_server_config *) ap_get_module_config(r->server->module_config, &urlalias_module);
 
     if (server_config->engine_status == ENGINE_DISABLED) {
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "URLALiasEngine is set to Off");
+        return DECLINED;
+    }
+
+    /* This is not for us */
+    if (!r->uri || strlen(r->uri) == 0) {
         return DECLINED;
     }
 
@@ -213,51 +517,20 @@ static int hook_translate_name(request_rec *r)
         return DECLINED;
     }
 
-    /* This is not for us */
-    if (!r->uri || strlen(r->uri) == 0) {
-        return DECLINED;
-    }
-
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->uri : %s", r->uri);
 
-    prepared_stmt = apr_hash_get(dbd->prepared, QUERY_LABEL_GENERIC_ROUTE, APR_HASH_KEY_STRING);
     ap_regex_t *compiled_regex = NULL;
 
-    /* the prepared statement disapearred */
-    if (prepared_stmt == NULL) {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "A prepared statement could not be found");
-        return DECLINED;
-    }
+    for (hi = hi_first; hi; hi = apr_hash_next(hi)) {
+        const char *key;
+        void *val;
+        route_cache_item *cache_item;
 
-    select_error_code = apr_dbd_pvselect(dbd->driver,
-                                         r->pool,
-                                         dbd->handle,
-                                         &res,
-                                         prepared_stmt,
-                                         0,
-                                         r->uri,
-                                         NULL);
+        apr_hash_this(hi, (void*) &key, NULL, &val);
+        cache_item = val;
 
-    if (select_error_code != 0) {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-                      "Query execution error looking up '%s' "
-                      "in database", r->uri);
-        return DECLINED;
-    }
-
-    while( apr_dbd_get_row(dbd->driver, r->pool, res, &row, -1) == 0) {
-        /* a generic route is a "source" field with the generic_route flag set to 1 */
-        generic_route = apr_dbd_get_entry(dbd->driver, row, 0);
-
-        /* TODO : escape the '&' char */
-        parameters = apr_dbd_get_entry(dbd->driver, row, 4);
-        module     = apr_dbd_get_entry(dbd->driver, row, 2);
-        view       = apr_dbd_get_entry(dbd->driver, row, 3);
-
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "generic route : %s", generic_route);
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "parameters : %s", parameters);
-
-        compiled_regex = ap_pregcomp(r->pool, generic_route, AP_REG_EXTENDED | AP_REG_ICASE);
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Compiling : %s", cache_item->generic_route);
+        compiled_regex = ap_pregcomp(r->pool, cache_item->generic_route, AP_REG_EXTENDED | AP_REG_ICASE);
 
         if (!compiled_regex) {
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Unable to compile generic route : %s", generic_route);
@@ -267,14 +540,14 @@ static int hook_translate_name(request_rec *r)
         regexec_result = ap_regexec(compiled_regex, r->uri, AP_MAX_REG_MATCH, regmatch, AP_REG_EXTENDED | AP_REG_ICASE);
 
         if (regexec_result == 0) {
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "%s succesfully applied on %s", generic_route, r->uri);
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "%s succesfully applied on %s", cache_item->generic_route, r->uri);
 
             const char *subs;
-            subs = ap_pregsub(r->pool, parameters, r->uri, AP_MAX_REG_MATCH, regmatch);
+            subs = ap_pregsub(r->pool, cache_item->parameters, r->uri, AP_MAX_REG_MATCH, regmatch);
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "subs : %s", subs);
 
             /* assembling the module/view URL and creating the absolute path to it */
-            target = gen_target_path(r, module, view);
+            target = gen_target_path(r, cache_item->module, cache_item->view);
             r->filename = apr_pstrdup(r->pool, ap_os_escape_path(r->pool, target, 1));
 
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "ap_document_root : %s", ap_document_root(r));
@@ -283,6 +556,8 @@ static int hook_translate_name(request_rec *r)
 
             /* adding parameters to our request */
             r->args = apr_pstrdup(r->pool, subs);
+
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->args : %s", r->args);
 
             /* avoid deadlooping */
             if (strcmp(r->uri, target) == 0) {
@@ -302,9 +577,6 @@ static int hook_translate_name(request_rec *r)
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "internal redirect from %s to %s ", r->uri, r->filename);
 
             return OK;
-        } else {
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "failed to apply %s on %s", generic_route, r->uri);
-            continue;
         }
     }
 
@@ -354,7 +626,7 @@ static int hook_translate_name(request_rec *r)
         /* all the redirection work is done in must_redirect */
         return HTTP_MOVED_PERMANENTLY;
     }
-    
+
     /* assembling the module/view URL and creating the absolute path to it */
     target = gen_target_path(r, module, view);
     r->filename = apr_pstrdup(r->pool, ap_os_escape_path(r->pool, target, 1));
@@ -510,6 +782,8 @@ static const char *cmd_urlaliasinstallationkey(cmd_parms *cmd, void *in_director
  */
 static void url_alias_register_hooks(apr_pool_t *p)
 {
+    ap_hook_child_init(hook_child_init, NULL, NULL, APR_HOOK_MIDDLE);
+    ap_hook_post_read_request(hook_post_read_request, NULL, NULL, APR_HOOK_MIDDLE);
     ap_hook_translate_name(hook_translate_name, NULL, NULL, APR_HOOK_MIDDLE);
 }
 
@@ -557,3 +831,7 @@ module AP_MODULE_DECLARE_DATA urlalias_module = {
     command_table,            /* table of config file commands       */
     url_alias_register_hooks  /* register hooks                      */
 };
+
+/*
+ * vim: sw=4 ts=4 fdm=marker
+ */
