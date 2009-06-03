@@ -595,7 +595,6 @@ static int hook_translate_name(request_rec *r)
             }
             
 #ifdef URL_ALIAS_DEBUG_ENABLED
-            /* now we redirect internally to the real filename */
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "internal redirect from %s to %s ", r->uri, r->filename);
 #endif
 
@@ -677,7 +676,6 @@ static int hook_translate_name(request_rec *r)
         return HTTP_BAD_REQUEST;
     }
 
-    /* now we redirect internally to the real filename */
 #ifdef URL_ALIAS_DEBUG_ENABLED
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "internal redirect from %s to %s ", r->uri, r->filename);
 #endif
