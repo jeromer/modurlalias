@@ -200,27 +200,6 @@ static int set_cache_value(const char *key,
 }
 
 /*
- * Helper : fetches a generic route in the per child cache
- */
-static route_cache_item *get_cache_value(char *key)
-{
-    route_cache_item *cache_item = NULL;
-
-    if (generic_route_cache_p) {
-#if APR_HAS_THREADS
-        apr_thread_mutex_lock(generic_route_cache_p->mutex);
-#endif
-         cache_item = (route_cache_item *) apr_hash_get(generic_route_cache_p->cache_item_list, key, APR_HASH_KEY_STRING);
-
-#if APR_HAS_THREADS
-        apr_thread_mutex_unlock(generic_route_cache_p->mutex);
-#endif
-    }
-
-    return cache_item;
-}
-
-/*
  * Helper : Dumps route map cache contents
  */
 static void dump_cache_contents(request_rec *r)
