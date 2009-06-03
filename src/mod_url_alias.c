@@ -316,6 +316,25 @@ static const char *gen_target_path(request_rec *r, const char *module, const cha
     return target;
 }
 
+static int check_deadloop_and_absolute_path(request_rec *r, const char *target)
+{
+    /* avoid deadlooping */
+    if (strcmp(r->uri, target) == 0) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "deadlooping URI : %s on target : %s ", r->uri, target);
+        return 1;
+    }
+
+    /* the filename must be either an absolute local path or an
+    * absolute local URL.
+    */
+    if (r->filename[0] != '/' && !ap_os_is_path_absolute(r->pool, r->filename)) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "non absolute path : %s", r->filename);
+        return 1;
+    }
+
+    return APR_SUCCESS;
+}
+
 /* }}} */
 
 /*
@@ -485,6 +504,8 @@ static int hook_translate_name(request_rec *r)
     /* the system URL to redirect to */
     const char *target = NULL;
 
+    apr_status_t rv;
+
     /* the cached generic routes */
     apr_hash_index_t *hi_first = apr_hash_first(generic_route_cache_p->pool, generic_route_cache_p->cache_item_list);
     apr_hash_index_t *hi;
@@ -567,20 +588,12 @@ static int hook_translate_name(request_rec *r)
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->args : %s", r->args);
 #endif
 
-            /* avoid deadlooping */
-            if (strcmp(r->uri, target) == 0) {
-                ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "deadlooping URI : %s on target : %s ", r->uri, target);
+            rv = check_deadloop_and_absolute_path(r, target);
+
+            if (rv != APR_SUCCESS) {
                 return HTTP_BAD_REQUEST;
             }
-
-            /* the filename must be either an absolute local path or an
-            * absolute local URL.
-            */
-            if (r->filename[0] != '/' && !ap_os_is_path_absolute(r->pool, r->filename)) {
-                ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "non absolute path : %s", r->filename);
-                return HTTP_BAD_REQUEST;
-            }
-
+            
 #ifdef URL_ALIAS_DEBUG_ENABLED
             /* now we redirect internally to the real filename */
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "internal redirect from %s to %s ", r->uri, r->filename);
@@ -658,17 +671,9 @@ static int hook_translate_name(request_rec *r)
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->args : %s", r->args);
 #endif
 
-    /* avoid deadlooping */
-    if (strcmp(r->uri, target) == 0) {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "deadlooping URI : %s on target : %s ", r->uri, target);
-        return HTTP_BAD_REQUEST;
-    }
+    rv = check_deadloop_and_absolute_path(r, target);
 
-    /* the filename must be either an absolute local path or an
-     * absolute local URL.
-     */
-    if (r->filename[0] != '/' && !ap_os_is_path_absolute(r->pool, r->filename)) {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "non absolute path : %s", r->filename);
+    if (rv != APR_SUCCESS) {
         return HTTP_BAD_REQUEST;
     }
 
