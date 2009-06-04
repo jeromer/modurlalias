@@ -54,6 +54,8 @@
 #define REGEX_FILE_EXT_EXCLUSION "\\.(?:gif|jp[e]?g|png|ico|css|js|mp3|flv)$"
 #define TABLE_NAME "urlalias"
 
+#define SERVER_VARIABLE_NAME "URL_ALIAS_PARAMS"
+
 /*
  * Optional function pointers : needed in post_config
  * - ap_dbdd_prepare
@@ -335,6 +337,14 @@ static int check_deadloop_and_absolute_path(request_rec *r, const char *target)
     return APR_SUCCESS;
 }
 
+static void inject_server_variable(request_rec *r, const char *name, const char *value)
+{
+    /* makes it possible to use the http://php.net/apache_note function */
+    apr_table_set(r->notes, name, value);
+
+    /* available via $_SERVER as well */
+    apr_table_set(r->subprocess_env, name, value);
+}
 /* }}} */
 
 /*
@@ -594,6 +604,9 @@ static int hook_translate_name(request_rec *r)
                 return HTTP_BAD_REQUEST;
             }
             
+            /* adds $_SERVER variable to the script */
+            inject_server_variable(r, SERVER_VARIABLE_NAME, subs);
+
 #ifdef URL_ALIAS_DEBUG_ENABLED
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "internal redirect from %s to %s ", r->uri, r->filename);
 #endif
@@ -675,6 +688,9 @@ static int hook_translate_name(request_rec *r)
     if (rv != APR_SUCCESS) {
         return HTTP_BAD_REQUEST;
     }
+
+    /* adds $_SERVER variable to the script */
+    inject_server_variable(r, SERVER_VARIABLE_NAME, parameters);
 
 #ifdef URL_ALIAS_DEBUG_ENABLED
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "internal redirect from %s to %s ", r->uri, r->filename);
