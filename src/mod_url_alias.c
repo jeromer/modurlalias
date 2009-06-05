@@ -110,6 +110,9 @@ typedef struct {
     const char *module;
     const char *view;
     const char *parameters;
+
+    /* Compiled version of the generic route */
+    ap_regex_t *compiled_gr;
 } route_cache_item;
 
 /*
@@ -163,12 +166,14 @@ static int init_cache(apr_pool_t *pchild, server_rec *svr)
 /*
  * Helper : stores a generic route in the per child cache
  */
-static int set_cache_value(const char *key, 
+static int set_cache_value( request_rec *r,
+                            const char *key,
                             const char *module,
                             const char *view,
                             const char *parameters)
 {
     route_cache_item *cache_item;
+    ap_regex_t *compiled_regex = NULL;
 
     if (generic_route_cache_p) {
 
@@ -183,10 +188,21 @@ static int set_cache_value(const char *key,
 
             cache_item = (route_cache_item *) apr_palloc(generic_route_cache_p->pool, sizeof(route_cache_item));
 
+#ifdef URL_ALIAS_DEBUG_ENABLED
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Compiling : %s", key);
+#endif
+            compiled_regex = ap_pregcomp(generic_route_cache_p->pool, key, AP_REG_EXTENDED | AP_REG_ICASE);
+
+            if (!compiled_regex) {
+                /* ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Unable to compile generic route : %s", key); */
+                return 1;
+            }
+
             cache_item->generic_route = apr_pstrdup(generic_route_cache_p->pool, key);
             cache_item->module        = apr_pstrdup(generic_route_cache_p->pool, module);
             cache_item->view          = apr_pstrdup(generic_route_cache_p->pool, view);
             cache_item->parameters    = apr_pstrdup(generic_route_cache_p->pool, parameters);
+            cache_item->compiled_gr   = compiled_regex;
 
             apr_hash_set(generic_route_cache_p->cache_item_list,
                          apr_pstrdup(generic_route_cache_p->pool, key),
@@ -194,7 +210,7 @@ static int set_cache_value(const char *key,
                          cache_item);
 
         }
-        
+
 #if APR_HAS_THREADS
         apr_thread_mutex_unlock(generic_route_cache_p->mutex);
 #endif
@@ -353,7 +369,7 @@ static void inject_server_variable(request_rec *r, const char *name, const char 
 static void hook_child_init(apr_pool_t *pchild, server_rec *svr)
 {
     apr_status_t rv;
-    
+
     rv = init_cache(pchild, svr);
 
     if (rv != APR_SUCCESS) {
@@ -457,7 +473,7 @@ static int hook_post_read_request(request_rec *r)
          * This should avoid fetching all the generic routes for each request
          * and thus save a few SQL queries.
          */
-        rv = set_cache_value(generic_route, module, view, parameters);
+        rv = set_cache_value(r, generic_route, module, view, parameters);
 
         if (rv != APR_SUCCESS) {
             ap_log_rerror(APLOG_MARK, APLOG_ERR, rv, r, "Unable to store generic route '%s' in the cache", generic_route);
@@ -505,7 +521,7 @@ static int hook_translate_name(request_rec *r)
     ap_regmatch_t regmatch[AP_MAX_REG_MATCH];
 
     /* Table's fields */
-    const char *generic_route = NULL;
+    /* const char *generic_route = NULL; */
     const char *redirect_to   = NULL;
     const char *module        = NULL;
     const char *view          = NULL;
@@ -548,7 +564,7 @@ static int hook_translate_name(request_rec *r)
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->uri : %s", r->uri);
 #endif
 
-    ap_regex_t *compiled_regex = NULL;
+    /* ap_regex_t *compiled_regex = NULL; */
 
     for (hi = hi_first; hi; hi = apr_hash_next(hi)) {
         const char *key;
@@ -558,17 +574,7 @@ static int hook_translate_name(request_rec *r)
         apr_hash_this(hi, (void*) &key, NULL, &val);
         cache_item = val;
 
-#ifdef URL_ALIAS_DEBUG_ENABLED
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Compiling : %s", cache_item->generic_route);
-#endif
-        compiled_regex = ap_pregcomp(r->pool, cache_item->generic_route, AP_REG_EXTENDED | AP_REG_ICASE);
-
-        if (!compiled_regex) {
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Unable to compile generic route : %s", generic_route);
-            continue;
-        }
-
-        regexec_result = ap_regexec(compiled_regex, r->uri, AP_MAX_REG_MATCH, regmatch, AP_REG_EXTENDED | AP_REG_ICASE);
+        regexec_result = ap_regexec(cache_item->compiled_gr, r->uri, AP_MAX_REG_MATCH, regmatch, AP_REG_EXTENDED | AP_REG_ICASE);
 
         if (regexec_result == 0) {
 #ifdef URL_ALIAS_DEBUG_ENABLED
@@ -603,7 +609,7 @@ static int hook_translate_name(request_rec *r)
             if (rv != APR_SUCCESS) {
                 return HTTP_BAD_REQUEST;
             }
-            
+
             /* adds $_SERVER variable to the script */
             inject_server_variable(r, SERVER_VARIABLE_NAME, subs);
 
