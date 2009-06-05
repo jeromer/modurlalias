@@ -5,7 +5,6 @@
 
 APACHECTL_PATH=/usr/local/apache-2.2.9/bin/apachectl
 
-echo "Done"
 ./autogen.sh \
 && ./configure --with-apxs=`which apxs` \
 && make \
