@@ -1,0 +1,51 @@
+Developping with mod_url_alias
+==============================
+
+Developing with this module is simple, the only
+thing you have to do is to insert a new row any time a
+new content is created and you want it to be services by
+mod_url_alias.
+
+Using the PHP API
+-----------------
+
+You can load the api/php/modurlalias.php file in your project
+and you the provided API to store URL aliases directly into
+the URL alias table.
+
+Here is how you can do : 
+
+$dsn      = 'mysql:dbname=modurlalias;host=localhost';
+$user     = 'user';
+$password = 'password';
+
+$pdo = new PDO($dsn, $user, $password);
+
+$urlAlias = new URLAlias( $pdo );
+$urlAlias->source        = "toto";
+$urlAlias->module        = "module";
+$urlAlias->view          = "view.py";
+$urlAlias->parameters    = array( 'p1' => 'valueOfP1',
+                                  'p2' => 'valueOfP2' );
+
+If you have a different table name, you can add it as the second parameter
+of the URLAlias constructor :
+
+$urlAlias = new URLAlias( $pdo, $myTableName );
+
+Available attributes are :
+ - urlAlias::source
+ - urlAlias::module
+ - urlAlias::view
+ - urlAlias::parameters
+ - urlAlias::redirectTo
+ - urlAlias::genericRoute
+ - urlAlias::routePriority
+
+Using the Python API
+--------------------
+TODO
+
+Using the Ruby API
+------------------
+TODO

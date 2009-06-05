@@ -1,0 +1,27 @@
+How does this module work ?
+===========================
+
+The behaviour of this module is really simple.
+Whenever an URI is asked for your website it will
+look for the corresponding controller supposed
+the handle the request.
+
+For example a visitor requests the following URL :
+
+http://[...]/]David-Carradine-suicide-theory-disputed
+
+And this content must be handled by the article/read.php file.
+
+Then the mod_url_alias will finally call article/read.php with
+the corresponding parameters the read the article and returns
+its contents.
+
+You are not forced to use PHP here if you are a Python, Perl or
+Ruby developer it will work the same way since the module only
+does an internal redirection to a specific file. You are not forced
+to use a specific language. You can even use multiple languages to
+handle different URIs.
+
+So basically this means that you will get 1 SQL query per requested URL.
+This should not be a performance issue since the executed SQL query is really
+simple and use an index.

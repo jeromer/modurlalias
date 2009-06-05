@@ -1,0 +1,106 @@
+mod_url_alias configuration directives
+======================================
+
+Notes :
+ + all these directives are applicable for a VirtualHost only
+ + a example VirtualHost is available in the INSTALL file
+
+Configuration directives
+========================
+
+URLAliasEngine
+--------------
+Required :
+ + No
+
+Possible values :
+  + On
+  + Off
+
+Default value :
+  + Off (the URL Alias engine is disabled by default)
+
+Example :
+ + URLAliasEngine On  (enabled the URL alias engine)
+ + URLAliasEngine Off (disables the URL alias engine)
+
+Description :
+  Activates the URL Alias engine.
+  If you want to use the URL Alias engine this option  must be set to On.
+
+URLAliasTableName
+-----------------
+Required :
+  + No
+
+Possible values :
+  + any string value
+
+Default value :
+  + urlalias
+
+Example :
+  + URLAliasTableName site1_com_urlalias (A specific table for the site1.com host)
+  + URLAliasTableName site2_com_urlalias (A specific table for the site2.com host)
+
+Description :
+This directive is optional, if not defined the module will look for rows in table
+named "urlalias". Since you can use this module per VirtualHost you can also use different
+tables for different hosts, defining a table per host makes sense an you can configure the
+name of the table by using this configuration directive.
+
+URLAliasExcludeFiles
+--------------------
+Required :
+  + No
+
+Possible value :
+  + any PERL Compatible Regular Expression
+
+Default value :
+  + .(?:gif|jp[e]?g|png|ico|css|js|mp3|flv|mpg|avi)$
+
+Example :
+ + URLAliasExcludeFiles .(?:gif|jp[e]?g|png|ico|css|js|mp3|flv|mpg|avi)$
+ + URLAliasExcludeFiles .(?:gif|jp[e]?g|png|ico|css|js|mp3|flv|mpg|avi|html|pdf|xls)$
+
+Description :
+This directive makes it possible to exclude some URIs to be searched in the URL alias table.
+You can use any regular expression to exclude some URIs to be excluded.
+This regular expression will be compiled once at server startup, if the regular expression
+is not correct Apache will trigger an error.
+
+DBDriver
+-------
+Required :
+ + yes
+
+Please read the mod_dbd documentation about DBDriver :
+
+- http://httpd.apache.org/docs/2.2/mod/mod_dbd.html#dbdriver
+
+DBDParams
+---------
+Required :
+  + yes
+
+Please read the mod_dbd documentation about DBDParams :
+
+- http://httpd.apache.org/docs/2.2/mod/mod_dbd.html#dbdparams
+
+Configuration directives matrix
+===============================
+
++-----------------------+----------+--------------------------------------------------+---------------------------+
+|      Directive        | Required |                 Default value                    |       Possible value      |
++-----------------------+----------+--------------------------------------------------+---------------------------+
+| URLAliasEngine        |    No    | Off                                              | On, Off                   |
++-----------------------+----------+--------------------------------------------------+---------------------------+
+| URLAliasTableName     |    No    | urlalias                                         | Any string                |
++-----------------------+----------+--------------------------------------------------+---------------------------+
+| URLAliasExcludeFiles  |    No    | .(?:gif|jp[e]?g|png|ico|css|js|mp3|flv|mpg|avi)$ | Any PCRE compatible regex |
++-----------------------+----------+--------------------------------------------------+---------------------------+
+| DBDriver              |    Yes   |                                                  | cf mod_dbd doc            |
++-----------------------+----------+--------------------------------------------------+---------------------------+
+| DBDParams             |    Yes   |                                                  | cf mod_dbd doc            |
++-----------------------+----------+--------------------------------------------------+---------------------------+

@@ -1,0 +1,50 @@
+mod_url_alias features
+======================
+
+Enhanced SEO
+------------
+
+By avoiding any specific identifier (like numeric IDs) you can
+focus on how the URI and makes it look like you want.
+
+Automatic redirection
+---------------------
+
+Sometimes an URI is no longer valid or has been moved.
+By specifying a redirection target for a URI the mod_url_alias
+will automatically redirect to this new URI and call the according
+file supposed to handle the request.
+
+Generic routes support
+----------------------
+
+An example is worth thousands words.
+
+Let's say you have a blog engine and your URI always look like the following :
+
+- /blog/post/2009/01/02/My-Great-Article
+
+and the server file is
+
+- content/view.php and it accepts a bunch of parameters like year, month, day, title.
+
+Here is what you can define in the URL alias table :
++----------------------------------------------------+-------------------+---------+------------+--------------------------------------+---------------+----------------+
+| source                                             | redirect_to       | module  | view       | parameters                           | generic_route | route_priority |
++----------------------------------------------------+-------------------+---------+------------+--------------------------------------+---------------+----------------+
+| ^/blog/post/(\d{4})/(\d{2})/(\d{2})/([a-z_-]{3,})$ | NULL              | content | view.php   | year=$1\&month=$2\&date=$3\&title=$4 |             1 |              1 |
++----------------------------------------------------+-------------------+---------+------------+--------------------------------------+---------------+----------------+
+
+Defining the generic_route flag to 1 will instruct the module to process the source as a regular expression
+and to apply it on the current URI. The route_priority makes it possible to define in which order this route
+should be handled. mod_url_alias will fetch all the routes in order, priority are fetched in ascending order.
+So basically a priority of 1 is top priority and a priority of 100 is low priority.
+You can define a infinite amount of routes and priority.
+
+In order to avoid multiple SQL queries all generic routes are fetched at server startup, precompiled and then
+stored in the per child cache memory pool. This means that whenever you add a new route you will have to restart
+Apache.
+
+If ever a generic route has been matched a 'URL_ALIAS_PARAM' server variable will be available.
+For exemple you can access it with PHP via $_SERVER['URL_ALIAS_PARAM'] so you know which replacements
+have been done.
