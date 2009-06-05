@@ -6,6 +6,25 @@ Requirements
 Installation steps
 ==================
 
+Requirements
+------------
+
+In order to build this module you need the following tools :
+- aclocal
+- autoconf
+- automake
+- autoheader
+- libtoolize
+- apxs
+
+Running the following command should help you to know if you have everything installed already:
+
+which aclocal libtoolize autoconf autoheader automake apxs
+
+Note for Debian users, you need apxs2 and not apxs :
+
+which aclocal libtoolize autoconf autoheader automake apxs2
+
 Compiling the module
 --------------------
 Once your have downloaded the module tarball, unpack it.
