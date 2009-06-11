@@ -14,3 +14,4 @@ src/mod_url_alias.la
 src/mod_url_alias_la-mod_url_alias.lo
 src/mod_url_alias_la-mod_url_alias.o
 src/stamp-h1
+session.vim
