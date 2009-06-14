@@ -89,6 +89,7 @@ available in the doc/httpd.conf file :
         # how to define connection parameters for each connection driver
         # http://httpd.apache.org/docs/2.2/mod/mod_dbd.html#dbdparams
         # The example below is a working example for MySQL
+	# if 'password' does not work, try 'pass' instead
         DBDriver mysql
         DBDParams "host=dbhost port=3306 user=me password=xxxx dbname=mydatabase"
     </IfModule>
