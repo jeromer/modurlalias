@@ -1,0 +1,10 @@
+mod_url_alias-1.1
+-----------------
+
+Enhancements
+ -  Added new http_code field so it is now possible to set a custom HTTP error
+    code for redirections
+
+mod_url_alias-1.0
+-----------------
+Initial release

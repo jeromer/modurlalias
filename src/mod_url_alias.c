@@ -17,15 +17,18 @@
  *
  *
  * The actual table used
- * +-------------+--------------+------+-----+---------+-------+
- * | Field       | Type         | Null | Key | Default | Extra |
- * +-------------+--------------+------+-----+---------+-------+
- * | source      | varchar(200) | NO   | PRI |         |       |
- * | redirect_to | varchar(200) | YES  |     | NULL    |       |
- * | module      | varchar(30)  | NO   |     |         |       |
- * | view        | varchar(30)  | NO   |     |         |       |
- * | parameters  | varchar(200) | NO   |     |         |       |
- * +-------------+--------------+------+-----+---------+-------+
+ * +----------------+--------------+------+-----+---------+-------+
+ * | Field          | Type         | Null | Key | Default | Extra |
+ * +----------------+--------------+------+-----+---------+-------+
+ * | source         | varchar(200) | NO   | PRI |         |       | 
+ * | redirect_to    | varchar(200) | YES  |     | NULL    |       | 
+ * | http_code      | char(3)      | NO   |     | 301     |       | 
+ * | module         | varchar(30)  | NO   |     |         |       | 
+ * | view           | varchar(30)  | NO   |     |         |       | 
+ * | parameters     | varchar(200) | NO   |     |         |       | 
+ * | generic_route  | tinyint(1)   | NO   |     | 0       |       | 
+ * | route_priority | tinyint(4)   | YES  | UNI | NULL    |       | 
+ * +----------------+--------------+------+-----+---------+-------+
  **/
 
 #include "httpd.h"
@@ -459,9 +462,9 @@ static int hook_post_read_request(request_rec *r)
         generic_route = apr_dbd_get_entry(dbd->driver, row, 0);
 
         /* TODO : escape the '&' char */
-        parameters = apr_dbd_get_entry(dbd->driver, row, 4);
-        module     = apr_dbd_get_entry(dbd->driver, row, 2);
-        view       = apr_dbd_get_entry(dbd->driver, row, 3);
+        module     = apr_dbd_get_entry(dbd->driver, row, 3);
+        view       = apr_dbd_get_entry(dbd->driver, row, 4);
+        parameters = apr_dbd_get_entry(dbd->driver, row, 5);
 
 #ifdef URL_ALIAS_DEBUG_ENABLED
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "generic route : %s", generic_route);
@@ -523,6 +526,7 @@ static int hook_translate_name(request_rec *r)
     /* Table's fields */
     /* const char *generic_route = NULL; */
     const char *redirect_to   = NULL;
+    const char *http_code     = NULL;
     const char *module        = NULL;
     const char *view          = NULL;
     const char *parameters    = NULL;
@@ -655,12 +659,14 @@ static int hook_translate_name(request_rec *r)
     /* since the source field is unique there is only one result */
     /* no need for a loop here                                   */
     redirect_to = apr_dbd_get_entry(dbd->driver, row, 1);
-    module      = apr_dbd_get_entry(dbd->driver, row, 2);
-    view        = apr_dbd_get_entry(dbd->driver, row, 3);
-    parameters  = apr_dbd_get_entry(dbd->driver, row, 4);
+    http_code   = apr_dbd_get_entry(dbd->driver, row, 2);
+    module      = apr_dbd_get_entry(dbd->driver, row, 3);
+    view        = apr_dbd_get_entry(dbd->driver, row, 4);
+    parameters  = apr_dbd_get_entry(dbd->driver, row, 5);
 
 #ifdef URL_ALIAS_DEBUG_ENABLED
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "redirect_to : %s", redirect_to);
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "http_code   : %s", http_code);
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "module      : %s", module);
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "view        : %s", view);
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "parameters  : %s", parameters);
@@ -669,7 +675,7 @@ static int hook_translate_name(request_rec *r)
     /* If a redirection must be done, let's do it now */
     if (must_redirect(r, redirect_to)) {
         /* all the redirection work is done in must_redirect */
-        return HTTP_MOVED_PERMANENTLY;
+        return atoi(http_code);
     }
 
     /* assembling the module/view URL and creating the absolute path to it */
