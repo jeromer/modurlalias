@@ -23,8 +23,7 @@
  * | source         | varchar(200) | NO   | PRI |         |       | 
  * | redirect_to    | varchar(200) | YES  |     | NULL    |       | 
  * | http_code      | char(3)      | NO   |     | 301     |       | 
- * | module         | varchar(30)  | NO   |     |         |       | 
- * | view           | varchar(30)  | NO   |     |         |       | 
+ * | target         | varchar(100) | NO   |     | /       |       | 
  * | parameters     | varchar(200) | NO   |     |         |       | 
  * | generic_route  | tinyint(1)   | NO   |     | 0       |       | 
  * | route_priority | tinyint(4)   | YES  | UNI | NULL    |       | 
@@ -51,8 +50,6 @@
 #define SQL_SELECT_URL_ALIAS_QUERY_PART_3 " WHERE generic_route = 1 ORDER BY route_priority"
 #define QUERY_LABEL "urlalias_stmt"
 #define QUERY_LABEL_GENERIC_ROUTE "urlalias_generic_route_stmt"
-
-#define DIRECTORY_SEPARATOR "/"
 
 #define REGEX_FILE_EXT_EXCLUSION "\\.(?:gif|jp[e]?g|png|ico|css|js|mp3|flv)$"
 #define TABLE_NAME "urlalias"
@@ -110,8 +107,7 @@ typedef struct generic_route_cache {
  */
 typedef struct {
     const char *generic_route;
-    const char *module;
-    const char *view;
+    const char *target;
     const char *parameters;
 
     /* Compiled version of the generic route */
@@ -171,8 +167,7 @@ static int init_cache(apr_pool_t *pchild, server_rec *svr)
  */
 static int set_cache_value( request_rec *r,
                             const char *key,
-                            const char *module,
-                            const char *view,
+                            const char *target,
                             const char *parameters)
 {
     route_cache_item *cache_item;
@@ -202,8 +197,7 @@ static int set_cache_value( request_rec *r,
             }
 
             cache_item->generic_route = apr_pstrdup(generic_route_cache_p->pool, key);
-            cache_item->module        = apr_pstrdup(generic_route_cache_p->pool, module);
-            cache_item->view          = apr_pstrdup(generic_route_cache_p->pool, view);
+            cache_item->target        = apr_pstrdup(generic_route_cache_p->pool, target);
             cache_item->parameters    = apr_pstrdup(generic_route_cache_p->pool, parameters);
             cache_item->compiled_gr   = compiled_regex;
 
@@ -243,8 +237,7 @@ static void dump_cache_contents(request_rec *r)
         cache_item = val;
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "key : %s", key);
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "cache_item->generic_route : %s", cache_item->generic_route);
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "cache_item->module        : %s", cache_item->module);
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "cache_item->view          : %s", cache_item->view);
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "cache_item->target        : %s", cache_item->target);
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "cache_item->parameters    : %s", cache_item->parameters);
     }
 
@@ -319,22 +312,30 @@ static int must_ignore_uri(request_rec *r, urlalias_server_config *server_config
 /*
  * Helper : creates the absolute path of the target
  */
-static const char *gen_target_path(request_rec *r, const char *module, const char *view)
+static const char *gen_target_path(request_rec *r, const char *target)
 {
     /* this virtual host's document root */
     const char *document_root = NULL;
 
     /* the system URL to redirect to */
-    char *target = NULL;
+    char *absolute_target = NULL;
 
     document_root = ap_document_root(r);
-    target = apr_pstrcat(r->pool,
-                         document_root,
-                         DIRECTORY_SEPARATOR, module,
-                         DIRECTORY_SEPARATOR, view,
-                         NULL);
 
-    return target;
+    if(document_root[strlen(document_root) -1] != '/') {
+        absolute_target = apr_pstrcat(r->pool,
+                                      document_root,
+                                      "/",
+                                      target,
+                                      NULL);
+    } else {
+        absolute_target = apr_pstrcat(r->pool,
+                                      document_root,
+                                      target,
+                                      NULL);
+    }
+
+    return absolute_target;
 }
 
 static int check_deadloop_and_absolute_path(request_rec *r, const char *target)
@@ -416,8 +417,7 @@ static int hook_post_read_request(request_rec *r)
 
     /* Table's fields */
     const char *generic_route = NULL;
-    const char *module        = NULL;
-    const char *view          = NULL;
+    const char *target        = NULL;
     const char *parameters    = NULL;
 
     apr_status_t rv;
@@ -462,13 +462,12 @@ static int hook_post_read_request(request_rec *r)
         generic_route = apr_dbd_get_entry(dbd->driver, row, 0);
 
         /* TODO : escape the '&' char */
-        module     = apr_dbd_get_entry(dbd->driver, row, 3);
-        view       = apr_dbd_get_entry(dbd->driver, row, 4);
-        parameters = apr_dbd_get_entry(dbd->driver, row, 5);
+        target     = apr_dbd_get_entry(dbd->driver, row, 3);
+        parameters = apr_dbd_get_entry(dbd->driver, row, 4);
 
 #ifdef URL_ALIAS_DEBUG_ENABLED
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "generic route : %s", generic_route);
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "parameters : %s", parameters);
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "parameters    : %s", parameters);
 #endif
 
         /*
@@ -476,7 +475,7 @@ static int hook_post_read_request(request_rec *r)
          * This should avoid fetching all the generic routes for each request
          * and thus save a few SQL queries.
          */
-        rv = set_cache_value(r, generic_route, module, view, parameters);
+        rv = set_cache_value(r, generic_route, target, parameters);
 
         if (rv != APR_SUCCESS) {
             ap_log_rerror(APLOG_MARK, APLOG_ERR, rv, r, "Unable to store generic route '%s' in the cache", generic_route);
@@ -527,12 +526,11 @@ static int hook_translate_name(request_rec *r)
     /* const char *generic_route = NULL; */
     const char *redirect_to   = NULL;
     const char *http_code     = NULL;
-    const char *module        = NULL;
-    const char *view          = NULL;
+    const char *target        = NULL;
     const char *parameters    = NULL;
 
-    /* the system URL to redirect to */
-    const char *target = NULL;
+    /* The final destination for the request */
+    const char *final_target  =  NULL;
 
     apr_status_t rv;
 
@@ -592,13 +590,13 @@ static int hook_translate_name(request_rec *r)
 #endif
 
             /* assembling the module/view URL and creating the absolute path to it */
-            target = gen_target_path(r, cache_item->module, cache_item->view);
-            r->filename = apr_pstrdup(r->pool, ap_os_escape_path(r->pool, target, 1));
+            final_target = gen_target_path(r, cache_item->target);
+            r->filename = apr_pstrdup(r->pool, ap_os_escape_path(r->pool, final_target, 1));
 
 #ifdef URL_ALIAS_DEBUG_ENABLED
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "ap_document_root : %s", ap_document_root(r));
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "target : %s", target);
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->filename : %s", r->filename);
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "final_target     : %s", final_target);
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->filename      : %s", r->filename);
 #endif
 
             /* adding parameters to our request */
@@ -608,7 +606,7 @@ static int hook_translate_name(request_rec *r)
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->args : %s", r->args);
 #endif
 
-            rv = check_deadloop_and_absolute_path(r, target);
+            rv = check_deadloop_and_absolute_path(r, final_target);
 
             if (rv != APR_SUCCESS) {
                 return HTTP_BAD_REQUEST;
@@ -660,15 +658,13 @@ static int hook_translate_name(request_rec *r)
     /* no need for a loop here                                   */
     redirect_to = apr_dbd_get_entry(dbd->driver, row, 1);
     http_code   = apr_dbd_get_entry(dbd->driver, row, 2);
-    module      = apr_dbd_get_entry(dbd->driver, row, 3);
-    view        = apr_dbd_get_entry(dbd->driver, row, 4);
-    parameters  = apr_dbd_get_entry(dbd->driver, row, 5);
+    target      = apr_dbd_get_entry(dbd->driver, row, 3);
+    parameters  = apr_dbd_get_entry(dbd->driver, row, 4);
 
 #ifdef URL_ALIAS_DEBUG_ENABLED
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "redirect_to : %s", redirect_to);
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "http_code   : %s", http_code);
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "module      : %s", module);
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "view        : %s", view);
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "target      : %s", target);
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "parameters  : %s", parameters);
 #endif
 
@@ -679,13 +675,13 @@ static int hook_translate_name(request_rec *r)
     }
 
     /* assembling the module/view URL and creating the absolute path to it */
-    target = gen_target_path(r, module, view);
-    r->filename = apr_pstrdup(r->pool, ap_os_escape_path(r->pool, target, 1));
+    final_target = gen_target_path(r, target);
+    r->filename = apr_pstrdup(r->pool, ap_os_escape_path(r->pool, final_target, 1));
 
 #ifdef URL_ALIAS_DEBUG_ENABLED
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "ap_document_root : %s", ap_document_root(r));
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "target : %s", target);
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->filename : %s", r->filename);
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "final_target     : %s", final_target);
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->filename      : %s", r->filename);
 #endif
 
     /* adding parameters to our request */
@@ -695,7 +691,7 @@ static int hook_translate_name(request_rec *r)
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "r->args : %s", r->args);
 #endif
 
-    rv = check_deadloop_and_absolute_path(r, target);
+    rv = check_deadloop_and_absolute_path(r, final_target);
 
     if (rv != APR_SUCCESS) {
         return HTTP_BAD_REQUEST;
