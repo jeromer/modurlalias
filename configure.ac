@@ -1,5 +1,5 @@
 AC_PREREQ(2.53)
-AC_INIT(mod_url_alias, 1.0, jerome.renard@gmail.com)
+AC_INIT(mod_url_alias, 1.1, jerome.renard@gmail.com)
 AC_COPYRIGHT([Copyright (c) 2009 Jérôme Renard])
 
 MAKE_CONFIG_NICE(config.nice)
