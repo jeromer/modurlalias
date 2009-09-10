@@ -57,7 +57,7 @@
 #define SERVER_VARIABLE_NAME "URL_ALIAS_PARAMS"
 
 /*
- * Optional function pointers : needed in post_config
+ * Optional function pointers :
  * - ap_dbdd_prepare
  * - ap_dbd_acquire
  */
@@ -401,7 +401,7 @@ static int hook_post_read_request(request_rec *r)
     urlalias_server_config *server_config;
 
     /* The actual database connection */
-    ap_dbd_t *dbd = urlalias_dbd_acquire_fn(r);
+    ap_dbd_t *dbd;
 
     /* The prepared statement for our SQL query */
     apr_dbd_prepared_t *prepared_stmt = NULL;
@@ -430,6 +430,8 @@ static int hook_post_read_request(request_rec *r)
 #endif
         return DECLINED;
     }
+
+    dbd = urlalias_dbd_acquire_fn(r);
 
     /* Extra database connection check */
     if (dbd == NULL) {
@@ -502,7 +504,7 @@ static int hook_translate_name(request_rec *r)
     urlalias_server_config *server_config;
 
     /* The actual database connection */
-    ap_dbd_t *dbd = urlalias_dbd_acquire_fn(r);
+    ap_dbd_t *dbd;
 
     /* The prepared statement for our SQL query */
     apr_dbd_prepared_t *prepared_stmt = NULL;
@@ -555,6 +557,8 @@ static int hook_translate_name(request_rec *r)
     if (must_ignore_uri(r, server_config)) {
         return DECLINED;
     }
+
+    dbd = urlalias_dbd_acquire_fn(r);
 
     /* Extra database connection check */
     if (dbd == NULL) {
@@ -736,7 +740,7 @@ static const char *cmd_urlaliasengine(cmd_parms *cmd, void *in_directory_config,
     const char *sql_query = NULL;
     urlalias_server_config *server_config;
 
-    server_config    = ap_get_module_config(cmd->server->module_config, &urlalias_module);
+    server_config = ap_get_module_config(cmd->server->module_config, &urlalias_module);
 
     if (cmd->path == NULL) {
         /* <VirtualHost> configuration */
@@ -752,7 +756,7 @@ static const char *cmd_urlaliasengine(cmd_parms *cmd, void *in_directory_config,
         urlalias_dbd_acquire_fn = APR_RETRIEVE_OPTIONAL_FN(ap_dbd_acquire);
     }
 
-    /* The sstandard SQL query */
+    /* The standard SQL query */
     sql_query = gen_sql_query(cmd->pool, server_config, "standard_query");
     urlalias_dbd_prepare_fn(cmd->server, sql_query, QUERY_LABEL);
 
