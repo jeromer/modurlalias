@@ -5,6 +5,9 @@ Enhancements
  -  Added new http_code field so it is now possible to set a custom HTTP error
     code for redirections
 
+Bugfixes
+-	Fixed bug #1 : DBD: not configured error message when a VirtualHost does not use the module
+
 mod_url_alias-1.0
 -----------------
 Initial release
