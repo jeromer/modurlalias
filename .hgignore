@@ -11,8 +11,9 @@ aclocal.m4
 configure
 libtool
 src/mod_url_alias.la
-src/mod_url_alias_la-mod_url_alias.lo
-src/mod_url_alias_la-mod_url_alias.o
+src/*.o
+src/*.lo
+src/*.slo
 src/stamp-h1
 session.vim
 *.orig
