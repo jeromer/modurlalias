@@ -2,8 +2,9 @@ mod_url_alias-1.1
 -----------------
 
 Enhancements
- -  Added new http_code field so it is now possible to set a custom HTTP error
-    code for redirections
+ -  Added new http_code field so it is now possible to set a custom HTTP error code for redirections
+ -  Merged "module" and "view" fields into one, please update the table with upgrade/1.0-to-1.1/* scripts
+
 
 Bugfixes
 -	Fixed bug #1 : DBD: not configured error message when a VirtualHost does not use the module
