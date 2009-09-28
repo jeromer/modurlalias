@@ -387,16 +387,6 @@ static void hook_child_init(apr_pool_t *pchild, server_rec *svr)
  */
 static int hook_post_read_request(request_rec *r)
 {
-    /* The cache has already been generated */
-    if (generic_route_cache_p->cache_generated == 1) {
-#ifdef URL_ALIAS_DEBUG_ENABLED
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Cache already generated, skipping");
-
-        dump_cache_contents(r);
-#endif
-        return OK;
-    }
-
     /* The perserver configuration */
     urlalias_server_config *server_config;
 
@@ -429,6 +419,16 @@ static int hook_post_read_request(request_rec *r)
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "URLALiasEngine is set to Off");
 #endif
         return DECLINED;
+    }
+
+    /* The cache has already been generated */
+    if (generic_route_cache_p->cache_generated == 1) {
+#ifdef URL_ALIAS_DEBUG_ENABLED
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Cache already generated, skipping");
+
+        dump_cache_contents(r);
+#endif
+        return OK;
     }
 
     dbd = urlalias_dbd_acquire_fn(r);
